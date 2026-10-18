@@ -9,6 +9,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Readiness probe (`GET /api/v1/health/ready`) that verifies PostgreSQL and the
+  Miniflux API and reports each dependency separately.
+- Structured JSON logging with correlation identifiers (`feed_id`,
+  `ingestion_run_id`, `digest_id`) and no secret values.
 - Typed configuration with fail-fast required values and the `NAF_`
   environment prefix.
 - Miniflux reader adapter (REST API only) with normalized error handling.
@@ -23,6 +27,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- Documentation is English-only across the repository; the product
+  specification moved to `docs/PRODUCT_PLAN.md`.
+- Dependency audit (`uv audit`) added to CI, scoped to the deployed dependency
+  set (the optional `audio` extra is excluded).
 - Source moved to the mandatory `src/app/` layout with ports in
   `src/app/core/ports/` and schemas in `src/app/schemas/`.
 - Tooling aligned with project standards: ruff line length 120 with the

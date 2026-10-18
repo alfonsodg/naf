@@ -3,7 +3,10 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.logging import get_logger
 from app.core.ports.feed_reader import FeedReader
+
+logger = get_logger(__name__)
 
 
 class Collector:
@@ -29,6 +32,10 @@ class Collector:
             try:
                 entries = await self.feed_reader.get_entries(feed_id=feed_id, limit=limit)
             except Exception as exc:
+                logger.warning(
+                    "feed collection failed",
+                    extra={"feed_id": feed_id, "error": type(exc).__name__},
+                )
                 result["errors"].append({"feed_id": feed_id, "error": str(exc)})
                 result["feeds"].append(
                     {
@@ -58,6 +65,10 @@ class Collector:
             result["total_entries"] += len(entries)
 
         result["finished_at"] = datetime.now(UTC).isoformat()
+        logger.info(
+            "collection finished",
+            extra={"count": result["total_entries"], "feeds": len(result["feeds"])},
+        )
         return result
 
     async def get_entries(self, **kwargs: Any) -> list[dict[str, Any]]:

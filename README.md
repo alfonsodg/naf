@@ -64,6 +64,7 @@ uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run mypy src/
 uv run bandit -r src/ -q
+uv audit --no-extra audio --ignore GHSA-6w46-j5rx-g56g
 uv run pytest tests/unit -q
 ```
 
@@ -77,6 +78,7 @@ metadata; errors use the documented envelope
 | --- | --- | --- |
 | `GET` | `/health` | Liveness probe for deployments |
 | `GET` | `/api/v1/health` | Versioned liveness probe |
+| `GET` | `/api/v1/health/ready` | Readiness: PostgreSQL and Miniflux |
 | `GET` | `/api/v1/feeds` | List feeds with health metadata |
 | `GET` | `/api/v1/feeds/health` | Freshness and parsing status per feed |
 | `GET` | `/api/v1/entries` | List entries with filters and pagination |
@@ -89,7 +91,7 @@ metadata; errors use the documented envelope
 
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.
 - `docs/DEPLOYMENT.md` — topology, volumes, migrations, health, and rollback.
-- `docs/PLAN_COLECTOR_NOTICIAS_IA_AUDIO.md` — original product specification.
+- `docs/PRODUCT_PLAN.md` — product specification, scope, and phased delivery plan.
 - `CHANGELOG.md` — change history.
 - `REMOTE.md` — local-only operational inventory (never tracked).
 

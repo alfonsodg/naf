@@ -25,8 +25,8 @@ def test_citation_requires_source_identity() -> None:
 def test_digest_requires_stories_collection() -> None:
     """A digest always carries an explicit story list and version."""
     digest = Digest(
-        title="Informe",
-        summary="Resumen del periodo",
+        title="Report",
+        summary="Period summary",
         period_start="2026-10-18T00:00:00Z",
         period_end="2026-10-18T23:59:59Z",
         stories=[],
@@ -43,7 +43,7 @@ def test_digest_story_keeps_citations() -> None:
         title="Modelo publicado",
         summary="Un modelo nuevo",
         claims=["El modelo se publicó"],
-        citations=[Citation(entry_id="1", entry_url="https://example.test/1", title="Fuente")],
+        citations=[Citation(entry_id="1", entry_url="https://example.test/1", title="Source")],
     )
 
     assert len(story.citations) == 1

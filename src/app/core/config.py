@@ -19,11 +19,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Application
+    # Application identity (not deployment configuration)
     app_name: str = "naf"
     app_version: str = "0.1.0"
     debug: bool = False
-    api_prefix: str = Field(default="/api/v1")
+    api_prefix: str = "/api/v1"
+
+    # Logging
+    log_level: str = "INFO"
+    log_json: bool = True
 
     # Complement database
     database_url: str = Field(description="PostgreSQL DSN for the NAF database")
@@ -31,27 +35,32 @@ class Settings(BaseSettings):
     # Miniflux reader API
     miniflux_url: str = Field(description="Base URL of the Miniflux instance")
     miniflux_api_key: str = Field(description="Miniflux API token")
-    miniflux_timeout: float = Field(default=30.0)
-    miniflux_max_retries: int = Field(default=3)
+    miniflux_timeout: float = 30.0
+    miniflux_max_retries: int = 3
 
     # LLM adapter
-    llm_provider: str = Field(default="openai")
+    llm_provider: str = "openai"
     llm_api_key: str = Field(default="", description="LLM provider API key")
-    llm_model: str = Field(default="")
+    llm_model: str = ""
 
     # TTS adapter
-    tts_provider: str = Field(default="podcastfy")
-    tts_voice: str = Field(default="")
-    tts_language: str = Field(default="es-ES")
-    tts_speed: float = Field(default=1.0)
+    tts_provider: str = "podcastfy"
+    tts_voice: str = ""
+    tts_language: str = "es-ES"
+    tts_speed: float = 1.0
 
     # Audio storage
-    audio_storage_path: str = Field(default="./storage/audio")
-    audio_base_url: str = Field(default="")
+    audio_storage_path: str = "./storage/audio"
+    audio_base_url: str = ""
+
+    @property
+    def is_development(self) -> bool:
+        """Report whether the service runs with development conveniences."""
+        return self.debug
 
 
 def load_settings() -> Settings:
-    """Instantiate settings once at startup so failures surface early."""
+    """Instantiate settings once so missing values surface at import time."""
     return Settings()  # type: ignore[call-arg]
 
 

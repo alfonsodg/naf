@@ -113,12 +113,18 @@ The initial migration is `435254b79450` (complement schema). Verify with
 
 ```bash
 curl -fsS "$NAF_BASE_URL/health"
+curl -fsS "$NAF_BASE_URL/api/v1/health/ready"
 curl -fsS "$NAF_MINIFLUX_URL/healthcheck"
 ```
 
-Expected: the first returns HTTP 200 with `{"status": "ok"}`; the second
-returns HTTP 200 with body `OK`. A `/health` 200 is a smoke check only and does
-not replace endpoint-level tests.
+- `/health` is a liveness probe: it answers 200 as long as the process is up and
+  never touches a dependency.
+- `/api/v1/health/ready` is the readiness probe: it verifies PostgreSQL and the
+  Miniflux API, returns 200 when both respond, and 503 with a per-dependency
+  breakdown when either fails. A load balancer should route on this endpoint.
+- Miniflux's `/healthcheck` returns 200 with body `OK`.
+
+A liveness 200 is a smoke check only and does not replace endpoint-level tests.
 
 ## Rollback
 
