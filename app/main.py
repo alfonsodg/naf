@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.core.config import settings
-from app.api.routes import health
+from app.api.routes import feeds, health
 
 app = FastAPI(
     title=settings.app_name,
@@ -11,6 +11,7 @@ app = FastAPI(
 )
 
 app.include_router(health.router, prefix=settings.api_prefix, tags=["health"])
+app.include_router(feeds.router, prefix=settings.api_prefix, tags=["feeds"])
 
 
 @app.get("/health")

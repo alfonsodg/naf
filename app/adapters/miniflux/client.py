@@ -21,9 +21,9 @@ class MinifluxClient(FeedReader):
     async def health(self) -> Dict[str, Any]:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(f"{self.base_url}/v1/healthcheck")
+                resp = await client.get(f"{self.base_url}/healthcheck")
                 resp.raise_for_status()
-                return resp.json()
+                return {"status": resp.text.strip() or "ok"}
         except Exception as e:
             raise MinifluxAPIError(f"Miniflux health check failed: {e}")
 
