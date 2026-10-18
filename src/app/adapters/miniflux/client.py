@@ -48,7 +48,13 @@ class MinifluxClient(FeedReader):
                 response.raise_for_status()
                 return response
         except httpx.HTTPStatusError as exc:
-            raise MinifluxAPIError(f"Miniflux {path} returned {exc.response.status_code}") from exc
+            # Miniflux explains refusals in the body ("fetcher: access forbidden"),
+            # and that message is the only diagnostic the caller gets. Dropping it
+            # would reduce every failure to a bare status code.
+            detail = _error_message(exc.response)
+            raise MinifluxAPIError(
+                f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else "")
+            ) from exc
         except httpx.HTTPError as exc:
             raise MinifluxAPIError(f"Miniflux {path} request failed: {exc}") from exc
 
@@ -143,3 +149,81 @@ class MinifluxClient(FeedReader):
             headers={"Content-Type": "text/xml"},
         )
         return cast(dict[str, Any], response.json())
+
+    async def create_feed(
+        self,
+        feed_url: str,
+        *,
+        category_id: int | None = None,
+        title: str | None = None,
+        disabled: bool = False,
+    ) -> dict[str, Any]:
+        """Create one feed through the endpoint that parses it before storing.
+
+        Unlike the OPML import, ``POST /v1/feeds`` fetches and parses the feed
+        first, so a dead feed is refused instead of being stored silently.
+        """
+        body: dict[str, Any] = {"feed_url": feed_url, "disabled": disabled}
+        if category_id is not None:
+            body["category_id"] = category_id
+        if title:
+            body["title"] = title
+
+        response = await self._request("POST", "/v1/feeds", json_body=body)
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {"id": None}
+
+    async def update_feed(
+        self,
+        feed_id: int,
+        *,
+        title: str | None = None,
+        category_id: int | None = None,
+        disabled: bool | None = None,
+    ) -> dict[str, Any]:
+        """Change a feed title, category, or enabled state.
+
+        Every field is omitted when ``None``: Miniflux patches only the keys it
+        receives, so an omitted boolean is never coerced to ``false``.
+        """
+        body: dict[str, Any] = {}
+        if title is not None:
+            body["title"] = title
+        if category_id is not None:
+            body["category_id"] = category_id
+        if disabled is not None:
+            body["disabled"] = disabled
+        if not body:
+            raise MinifluxAPIError("no feed fields to update")
+
+        response = await self._request("PUT", f"/v1/feeds/{feed_id}", json_body=body)
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+
+    async def list_categories(self) -> list[dict[str, Any]]:
+        """List the reader categories."""
+        response = await self._request("GET", "/v1/categories")
+        return cast(list[dict[str, Any]], response.json())
+
+    async def create_category(self, title: str) -> dict[str, Any]:
+        """Create one category."""
+        response = await self._request("POST", "/v1/categories", json_body={"title": title})
+        return cast(dict[str, Any], response.json())
+
+    async def refresh_feed(self, feed_id: int) -> bool:
+        """Ask the reader to refresh one feed now."""
+        response = await self._request("PUT", f"/v1/feeds/{feed_id}/refresh")
+        return response.status_code == httpx.codes.NO_CONTENT
+
+
+def _error_message(response: httpx.Response) -> str:
+    """Extract the reader's error message from a failed response body."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return ""
+    if isinstance(payload, dict):
+        message = payload.get("error_message") or payload.get("error")
+        if isinstance(message, str):
+            return message
+    return ""

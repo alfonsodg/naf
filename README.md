@@ -81,11 +81,22 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/health/ready` | Readiness: PostgreSQL and Miniflux |
 | `GET` | `/api/v1/feeds` | List feeds with health metadata |
 | `GET` | `/api/v1/feeds/health` | Freshness and parsing status per feed |
+| `POST` | `/api/v1/feeds` | Validate and add one feed, optionally into a category |
+| `PATCH` | `/api/v1/feeds/{id}` | Rename, move to another category, or pause a feed |
+| `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
+| `POST` | `/api/v1/feeds/intake` | Validate and add feeds from a URL list or an OPML export |
+| `GET` | `/api/v1/categories` | List reader categories |
 | `GET` | `/api/v1/entries` | List entries with filters and pagination |
 | `PATCH` | `/api/v1/entries/{id}` | Set read or unread status |
 | `GET` | `/api/v1/opml/export` | Export subscriptions as OPML |
-| `POST` | `/api/v1/opml/import` | Import subscriptions from OPML |
+| `POST` | `/api/v1/opml/import` | Deprecated: stores the OPML without validating its feeds |
 | `POST` | `/api/v1/collect` | Run one ingestion pass |
+
+`POST /api/v1/feeds/intake` takes either a text body with one feed URL per line
+or an OPML document, validates every candidate over HTTP, and returns one report
+row per input URL. Only a feed that answered with real entries is added enabled;
+a host that blocks automated clients is reported and added paused, never
+discarded. See `docs/STANDARDS.md` for the verdicts and the safety rules.
 
 ## Documentation
 
