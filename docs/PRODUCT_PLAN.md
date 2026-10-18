@@ -5,15 +5,14 @@
 | **Project** | naf — Categorized feed aggregator with audio reports |
 | **Version** | Unreleased |
 | **Created** | 2026-10-18 |
-| **Updated** | 2026-10-18 18:00 |
+| **Updated** | 2026-10-18 18:16 |
 | **Author** | Alfonso de la Guarda Reyes |
 | **Location** | `docs/PRODUCT_PLAN.md` |
 
 **Status:** functional and technical proposal handed to a development agent
 **Date:** 2026-10-18
 **Product language:** Spanish
-**Target license:** open source, with an OSI-approved license; initial
-recommendation: Apache-2.0 (pending owner confirmation)
+**License:** Apache-2.0 (approved; see `LICENSE`)
 **Goal:** build a general-purpose categorized feed reader that collects entries
 from integrated sources and can generate reports in Spanish, as text and audio,
 when the user requests them.
@@ -354,10 +353,11 @@ This stack is a recommendation for estimation, not an authorization to deploy or
 to install services locally. The new project must decide its environment and
 document it before any integrated test.
 
-The product repository must declare an OSI-approved license. Apache-2.0 is
-proposed; confirm before creating the `LICENSE` file. Maintain an inventory of
-licenses for dependencies, models, voices, prompts, datasets, and assets: the fact
-that the code is OSS does not automatically make those materials open source.
+The product repository declares Apache-2.0, confirmed and approved; `LICENSE`
+exists. Maintain an inventory of licenses for dependencies, models, voices,
+prompts, datasets, and assets: the fact that the code is OSS does not
+automatically make those materials open source. The current dependency inventory
+is recorded in issue #2 and the licence policy in `docs/STANDARDS.md`.
 
 ## 9. Minimum data model
 
@@ -654,29 +654,36 @@ week of observation. Minimum metrics:
   regenerating/repeating stories.
 - The user understands the period, filters, time, and report version.
 
-## 17. Decisions the owner must confirm before development
+## 17. Approved decisions
 
-The agent receiving this plan must present these decisions in the startup issue or
-document; do not invent operational values:
+The owner approved all ten decisions on 2026-10-18. They are recorded here
+because the plan requires the decisions to live in the startup issue or a
+document; issue #2 carries the same record. Values are binding for the MVP and
+may only change through an explicit new decision.
 
-1. Product name and target repository/group.
-2. Private individual use (recommended) or multi-user.
-3. Initial interface: web only (recommended) or another channel.
-4. Initial general categories, example feeds, and maximum acceptable frequency per
-   source; AI/model feeds are a collection, not the only product content.
-5. Default report duration/style and display timezone.
-6. Remote, local, or both TTS; cost/privacy limits and Spanish voice.
-7. Development environment and test server; persistent audio location.
-8. Retention of entries, transcripts, and audio.
-9. Whether use of a Feedly account/API is authorized; by default, do not depend on
-   it.
-10. Future automatic delivery policy; by default, explicit request only.
+| # | Decision | Approved value |
+| --- | --- | --- |
+| 1 | Product name and repository | `naf`; `github.com/alfonsodg/naf`; default branch `main`, work merged into `develop` |
+| 2 | Usage model | Single private user. No multi-user accounts, roles, or public publishing. |
+| 3 | Initial interface | Web only. The REST API leaves room for a mobile or CLI client later. |
+| 4 | Categories, feeds, frequency | Six general categories plus a separate AI/models collection; RSS/Atom every 15–30 min, repository activity every 30–60 min, honouring `Cache-Control`/`ETag`/`Last-Modified` and published robots policies |
+| 5 | Report duration, style, timezone | 5–8 minutes as a flexible target; conversational Spanish with explicit citations; UTC for storage, local timezone for display |
+| 6 | TTS modality, cost, privacy | Local or remote selected by configuration, local preferred for privacy; per-report cost limit; configurable Spanish voice; **no voice cloning** |
+| 7 | Environment and audio storage | Local PostgreSQL and a local Miniflux container for development; `storage/audio/` on the filesystem behind a storage port that allows S3-compatible backends later |
+| 8 | Retention | Keep metadata and URLs; avoid full-body copies by default; immutable report and audio editions with configurable cleanup, tentatively 30–90 days |
+| 9 | Feedly API | Not a dependency of the MVP. Optional future integration only. |
+| 10 | Automatic delivery | Explicit user request only. No email, Telegram, push, or per-user RSS in the MVP. |
 
-Initial recommendations, subject to approval: general-purpose reader, Miniflux as the
-main reader and feed UI, Podcastfy for audio if it passes the tests, a complementary
-application only for reports/audio, one user, on-demand reports in Spanish, example
-feeds from several categories, an initial AI/models collection, five to eight
-minutes as a flexible target, selectable TTS, and no voice cloning.
+Consequences worth stating, because they constrain later work:
+
+- The single-user model means no authentication layer in the MVP; the service must
+  therefore never be exposed publicly without one.
+- "Web only" fixes the interface, not the API shape: the REST surface stays
+  versioned so a second client is a client, not a rewrite.
+- Decision 6 keeps Podcastfy as a candidate, not a commitment. The audio engine is
+  chosen by the Phase 5 comparison, and the `audio` extra remains optional.
+- Decision 10 forbids scheduling. Report generation is user-triggered only, so no
+  background job may be introduced without revisiting this row.
 
 ## 18. Instructions for the implementing agent
 
@@ -727,5 +734,5 @@ minutes as a flexible target, selectable TTS, and no voice cloning.
 ---
 
 **Intended use:** hand this document to the agent that will design and build the
-project. It must treat the Section 17 decisions as pending confirmation and must not
-present the plan as an already implemented product.
+project. Section 17 decisions are approved and binding; the agent must not present
+the plan as an already implemented product.

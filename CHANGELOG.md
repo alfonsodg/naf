@@ -27,6 +27,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- The ten plan decisions are approved and recorded in `docs/PRODUCT_PLAN.md`
+  section 17 and issue #2; they are binding for the MVP.
+- `docs/STANDARDS.md` now documents the licence policy, including the `psycopg`
+  LGPL-3.0 constraint on packaging.
 - Documentation is English-only across the repository; the product
   specification moved to `docs/PRODUCT_PLAN.md`.
 - Dependency audit (`uv audit`) added to CI, scoped to the deployed dependency

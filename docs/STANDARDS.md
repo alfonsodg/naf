@@ -5,7 +5,7 @@
 | **Project** | naf — Categorized feed aggregator with audio reports |
 | **Version** | Unreleased |
 | **Created** | 2026-10-18 |
-| **Updated** | 2026-10-18 13:00 |
+| **Updated** | 2026-10-18 18:20 |
 | **Author** | Alfonso de la Guarda Reyes |
 | **Location** | `docs/STANDARDS.md` |
 
@@ -29,6 +29,32 @@ enforced by configuration or by a test, not by convention alone.
   extra do not block the runtime image, which never installs it.
 - `pytest` is pinned below 9.0 because `podcastfy` (the `audio` extra) requires
   `pytest>=8.3.3,<9.0.0`. This is a hard upstream constraint, not a choice.
+
+## Licence policy
+
+The project is Apache-2.0. That licence covers this repository, not its
+dependencies, model weights, voices, or prompt templates.
+
+- **Licence inventory.** Every dependency is inventoried with its declared
+  licence before a distribution artefact is built. The current inventory is
+  recorded in issue #2; it is generated from installed package metadata, not from
+  documentation.
+- **`psycopg` is LGPL-3.0-only** and is the only copyleft package in the runtime
+  set. LGPL permits use from Apache-2.0 code while the library stays unmodified
+  and replaceable. Two consequences are binding:
+  - never vendor, patch, or fork `psycopg` inside this repository;
+  - never build a single-file artefact that statically bundles it without
+    revisiting this policy.
+- **MPL-2.0** (`certifi`, `pathspec`) is file-level copyleft. Unmodified use
+  carries no obligation beyond keeping notices. `pathspec` is development-only.
+- **Dev-only licences do not gate distribution.** `pytest`, `ruff`, `mypy`,
+  `bandit`, and `coverage` never enter the runtime image.
+- **Never invent a licence.** Where package metadata declares none (`bandit`,
+  `coverage`, `python-dotenv`), record it as undeclared rather than assuming the
+  project's usual licence.
+- **No scanning tool decides this.** Model weights, TTS voices, and feed content
+  are out of scope for any dependency scanner and are reviewed when Phase 5
+  selects an audio engine.
 
 ## File structure
 
