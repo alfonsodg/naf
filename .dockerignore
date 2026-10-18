@@ -1,0 +1,33 @@
+# Build context exclusions (DOCKER.md mandatory).
+.git/
+.gitignore
+.venv/
+venv/
+
+# Never ship documentation or tests in the runtime image.
+docs/
+tests/
+*.md
+!README.md
+
+# Local-only operational state
+.env
+.env.*
+REMOTE.md
+debug/
+reference/
+_*/
+
+# Python and tooling caches
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime data
+storage/
+*.db
+*.sqlite3
