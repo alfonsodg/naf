@@ -9,6 +9,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Feed intake (`POST /api/v1/feeds/intake`) that accepts a pasted list of URLs
+  (one per line) or an OPML export and validates every candidate over HTTP
+  before adding it, with a per-URL report of verdict, status, item count, and
+  outcome.
+- Feed validation with six distinct verdicts: `alive`, `empty`, `http_error`,
+  `throttled`, `timeout`, and `blocked`. Only `alive` feeds are added enabled;
+  `throttled` feeds are added disabled as unverified instead of being discarded.
+- Single-feed management: `POST /feeds` (validated add with an optional
+  category), `PATCH /feeds/{id}` (rename, move category, pause), and
+  `POST /feeds/{id}/refresh`; `GET /categories` lists reader categories.
+- SSRF protection for every candidate URL: `http`/`https` only, no credentials
+  in the authority, and loopback, private, link-local, reserved, and metadata
+  targets refused, including on each redirect hop.
+- OPML parsing that preserves folder nesting as categories and reports a feed
+  appearing under several tags instead of keeping only the first, which is what
+  Miniflux's own importer does.
+- Settings `NAF_FEED_VALIDATION_TIMEOUT`, `NAF_FEED_VALIDATION_CONCURRENCY`,
+  `NAF_FEED_VALIDATION_MAX_REDIRECTS`, and `NAF_FEED_INTAKE_MAX_BYTES` in every
+  environment file.
 - Readiness probe (`GET /api/v1/health/ready`) that verifies PostgreSQL and the
   Miniflux API and reports each dependency separately.
 - Structured JSON logging with correlation identifiers (`feed_id`,
@@ -27,6 +46,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- `POST /api/v1/opml/import` is deprecated in favour of `POST /feeds/intake`:
+  Miniflux stores an imported OPML without fetching anything, so dead feeds
+  enter the reader silently and the import is not atomic.
+- `defusedxml` added as a runtime dependency (PSF-2.0) for OPML parsing, with
+  `types-defusedxml` as a development-only stub package.
 - The ten plan decisions are approved and recorded in `docs/PRODUCT_PLAN.md`
   section 17 and issue #2; they are binding for the MVP.
 - `docs/STANDARDS.md` now documents the licence policy, including the `psycopg`

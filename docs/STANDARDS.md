@@ -61,6 +61,7 @@ dependencies, model weights, voices, or prompt templates.
 ```text
 src/app/
   adapters/        Infrastructure implementations of the ports
+    http/          Outbound HTTP probes (feed validation)
     miniflux/      Reader REST API client
     storage/       Audio persistence
   core/            Settings, exceptions, and ports
@@ -149,6 +150,42 @@ Reader state (feeds, entries, read flags, categories) belongs to Miniflux and
 is accessed only through its REST API. Accessing Miniflux tables directly is
 prohibited. NAF owns digests, citations, audio assets, classification, and
 ingestion runs in its own PostgreSQL database.
+
+## Feed intake and validation
+
+A feed URL arriving from a pasted list, an OPML export, or a form field is
+untrusted input. Two rules follow, and both are binding.
+
+**Validation precedes insertion.** Every candidate is probed over HTTP before
+the reader is asked to store it. A catalogue's own "active" flag is not
+evidence: measured catalogues carry 4–25 % dead feeds. The probe produces
+exactly one verdict:
+
+| Verdict | Meaning | Action |
+| --- | --- | --- |
+| `alive` | HTTP 2xx and at least one `<item>` or `<entry>` | added enabled |
+| `empty` | HTTP 2xx but no entries | reported, not added |
+| `http_error` | 404, 410, dead domain, or a non-feed document | reported, not added |
+| `throttled` | 401, 403, 405, 406, 409, 418, 429 | added **disabled**, reported unverified |
+| `timeout` | no response within the configured limit | reported, not added |
+| `blocked` | forbidden scheme, host, or redirect target | reported, not added |
+
+`throttled` is deliberately distinct: a host that refuses automated clients
+(Reddit, several CDNs) still serves the same feed to a browser. Treating that
+as a dead feed would discard a valid subscription, so it is added paused rather
+than dropped.
+
+**Feeds are created one at a time.** `POST /v1/feeds` fetches and parses a feed
+before inserting it; `POST /v1/import` inserts straight into the database
+without fetching anything and is not atomic. Bulk intake therefore uses the
+per-feed endpoint and keeps its own report, and `POST /opml/import` is
+deprecated.
+
+**SSRF is refused before the network.** Only `http` and `https` are accepted;
+credentials in the authority, loopback, private, link-local, reserved, and
+metadata targets are rejected, and every redirect hop is re-validated because
+httpx would otherwise follow one into a private address. This holds even with a
+single user and no public exposure.
 
 ## Git conventions
 

@@ -60,3 +60,37 @@ class FeedReader(ABC):
     @abstractmethod
     async def import_opml(self, opml_content: str) -> dict[str, Any]:
         """Import subscriptions from an OPML document."""
+
+    @abstractmethod
+    async def create_feed(
+        self,
+        feed_url: str,
+        *,
+        category_id: int | None = None,
+        title: str | None = None,
+        disabled: bool = False,
+    ) -> dict[str, Any]:
+        """Add one feed, fetching and parsing it before it is stored."""
+
+    @abstractmethod
+    async def list_categories(self) -> list[dict[str, Any]]:
+        """List the reader categories."""
+
+    @abstractmethod
+    async def create_category(self, title: str) -> dict[str, Any]:
+        """Create a category and return it."""
+
+    @abstractmethod
+    async def update_feed(
+        self,
+        feed_id: int,
+        *,
+        title: str | None = None,
+        category_id: int | None = None,
+        disabled: bool | None = None,
+    ) -> dict[str, Any]:
+        """Change a feed title, category, or enabled state."""
+
+    @abstractmethod
+    async def refresh_feed(self, feed_id: int) -> bool:
+        """Ask the reader to refresh one feed now."""

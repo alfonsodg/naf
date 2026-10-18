@@ -38,6 +38,30 @@ class Settings(BaseSettings):
     miniflux_timeout: float = 30.0
     miniflux_max_retries: int = 3
 
+    # Feed intake and validation
+    feed_validation_timeout: float = Field(
+        default=15.0,
+        gt=0,
+        description="Per-feed HTTP timeout when validating a candidate feed",
+    )
+    feed_validation_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        description="Maximum parallel feed probes during one intake",
+    )
+    feed_validation_max_redirects: int = Field(
+        default=5,
+        ge=0,
+        le=10,
+        description="Redirect hops followed while validating a feed",
+    )
+    feed_intake_max_bytes: int = Field(
+        default=1_000_000,
+        gt=0,
+        description="Largest accepted intake payload or feed response body",
+    )
+
     # LLM adapter
     llm_provider: str = "openai"
     llm_api_key: str = Field(default="", description="LLM provider API key")
