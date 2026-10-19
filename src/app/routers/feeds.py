@@ -219,6 +219,16 @@ async def list_entries(
     }
 
 
+@router.get("/entries/{entry_id}")
+async def read_entry(entry_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
+    """Return one entry with the same shape the list returns."""
+    try:
+        entry = await _client().get_entry(entry_id)
+    except MinifluxAPIError as exc:
+        raise _unavailable(exc) from exc
+    return {"data": normalize_entry(entry)}
+
+
 @router.patch("/entries/{entry_id}")
 async def update_entry(
     entry_id: Annotated[int, Path(ge=1)],

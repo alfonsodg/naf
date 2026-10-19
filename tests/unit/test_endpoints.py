@@ -49,6 +49,19 @@ def stub_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     async def update_entries_status(self: Any, entry_ids: list[int], status: str) -> bool:
         return True
 
+    async def get_entry(self: Any, entry_id: int) -> dict[str, Any]:
+        return {
+            "id": entry_id,
+            "guid": "guid-10",
+            "url": "https://example.test/post-10",
+            "title": "Post 10",
+            "published_at": "2026-10-18T09:00:00Z",
+            "status": "unread",
+            "enclosures": [{"id": 7, "url": "https://example.test/audio.mp3", "mime_type": "audio/mpeg"}],
+            "tags": [{"id": 3, "name": "ai"}],
+            "feed": {"id": 1, "title": "Alpha", "feed_url": "https://alpha.test/rss"},
+        }
+
     async def export_opml(self: Any) -> str:
         return OPML
 
@@ -59,6 +72,7 @@ def stub_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(feeds.MinifluxClient, "list_feeds", list_feeds)
     monkeypatch.setattr(feeds.MinifluxClient, "get_entries_page", get_entries_page)
     monkeypatch.setattr(feeds.MinifluxClient, "update_entries_status", update_entries_status)
+    monkeypatch.setattr(feeds.MinifluxClient, "get_entry", get_entry)
     monkeypatch.setattr(feeds.MinifluxClient, "export_opml", export_opml)
     monkeypatch.setattr(feeds.MinifluxClient, "import_opml", import_opml)
 
@@ -152,6 +166,25 @@ def test_entries_without_a_period_keep_the_current_behaviour() -> None:
     assert captured["published_before"] is None
 
 
+def test_the_entry_detail_is_served() -> None:
+    """One entry is served with the same shape the list returns."""
+    response = client.get("/api/v1/entries/10")
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["entry_id"] == 10
+    assert body["feed_url"] == "https://alpha.test/rss"
+    assert body["enclosures"][0]["mime_type"] == "audio/mpeg"
+    assert body["tags"][0]["name"] == "ai"
+
+
+def test_the_entry_detail_refuses_an_unknown_identifier() -> None:
+    """The identifier must be a positive number."""
+    response = client.get("/api/v1/entries/0")
+
+    assert response.status_code == 422
+
+
 def test_patch_entry_updates_status() -> None:
     """PATCH /entries/{id} changes the read status of one entry."""
     response = client.patch("/api/v1/entries/10", json={"status": "read"})
@@ -196,12 +229,14 @@ def test_reader_failure_returns_502_for_every_endpoint() -> None:
         ("/api/v1/feeds", "get"),
         ("/api/v1/feeds/health", "get"),
         ("/api/v1/entries", "get"),
+        ("/api/v1/entries/10", "get"),
         ("/api/v1/opml/export", "get"),
         ("/api/v1/collect", "post"),
     ):
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(feeds.MinifluxClient, "list_feeds", failing)
             patch.setattr(feeds.MinifluxClient, "get_entries_page", failing)
+            patch.setattr(feeds.MinifluxClient, "get_entry", failing)
             patch.setattr(feeds.MinifluxClient, "export_opml", failing)
             response = getattr(client, method)(route)
 

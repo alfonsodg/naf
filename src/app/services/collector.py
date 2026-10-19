@@ -119,6 +119,8 @@ def normalize_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "starred": entry.get("starred", False),
         "content": entry.get("content"),
         "reading_time": entry.get("reading_time"),
+        "enclosures": entry.get("enclosures") or [],
+        "tags": entry.get("tags") or [],
         "feed_id": feed.get("id") or entry.get("feed_id"),
         "feed_title": feed.get("title"),
         "feed_url": feed.get("feed_url"),

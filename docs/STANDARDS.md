@@ -92,7 +92,9 @@ services, or `db`; `tests/unit/test_app_structure.py` enforces this.
 - Errors are domain exceptions from `src/app/core/exceptions.py`; routers
   translate them into the documented error envelope.
 - No silent data loss: entries without a publication date are kept, and
-  per-feed failures never abort an ingestion pass.
+  per-feed failures never abort an ingestion pass. The normalized entry keeps
+  the attachments and the tags the feed provided, because an audio enclosure
+  is part of the provenance of a podcast entry.
 - Public functions and classes carry docstrings stating responsibility and
   inputs/outputs. Commented-out code is not committed.
 - Timestamps cross the API as ISO-8601 and are normalised to UTC at the

@@ -87,6 +87,27 @@ def test_normalize_entry_preserves_provenance() -> None:
     assert normalized["feed_url"] == "https://alpha.test/rss"
 
 
+def test_normalize_entry_keeps_the_attachments_and_the_tags() -> None:
+    """The enclosure of a podcast and the tags of the feed survive."""
+    feed = _feed(1, "Alpha")
+    entry = _entry(10, feed, "2026-10-18T09:00:00Z")
+    entry["enclosures"] = [{"id": 7, "url": "https://example.test/audio.mp3", "mime_type": "audio/mpeg"}]
+    entry["tags"] = [{"id": 3, "name": "ai"}]
+
+    normalized = normalize_entry(entry)
+
+    assert normalized["enclosures"][0]["mime_type"] == "audio/mpeg"
+    assert normalized["tags"][0]["name"] == "ai"
+
+
+def test_normalize_entry_defaults_the_attachments_and_the_tags() -> None:
+    """An entry without them carries empty lists, not missing fields."""
+    normalized = normalize_entry(_entry(10, _feed(1, "Alpha"), "2026-10-18T09:00:00Z"))
+
+    assert normalized["enclosures"] == []
+    assert normalized["tags"] == []
+
+
 async def test_collect_counts_entries_per_feed() -> None:
     """Each feed contributes its entry count to the run totals."""
     feeds = [_feed(1, "Alpha"), _feed(2, "Beta")]
