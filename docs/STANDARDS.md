@@ -95,6 +95,9 @@ services, or `db`; `tests/unit/test_app_structure.py` enforces this.
   per-feed failures never abort an ingestion pass.
 - Public functions and classes carry docstrings stating responsibility and
   inputs/outputs. Commented-out code is not committed.
+- Timestamps cross the API as ISO-8601 and are normalised to UTC at the
+  boundary; a value without a zone is read as UTC. The reader receives unix
+  timestamps, which is the format its API expects.
 
 ## Linting and formatting
 

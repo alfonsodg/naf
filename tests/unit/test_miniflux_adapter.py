@@ -1,5 +1,7 @@
 """Contract tests for the Miniflux adapter using recorded shapes."""
 
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 
@@ -70,6 +72,28 @@ async def test_get_entries_builds_filters(client: MinifluxClient, monkeypatch: p
         "status": "read",
         "search": "model",
     }
+
+
+async def test_get_entries_sends_the_publication_period(
+    client: MinifluxClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The period is sent as the unix timestamps the reader expects."""
+    captured: dict[str, object] = {}
+
+    async def fake_request(method: str, path: str, **kwargs: object) -> httpx.Response:
+        captured.update(kwargs)
+        return _response(200, json_body={"entries": []})
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    await client.get_entries(
+        published_after=datetime(2026, 10, 1, tzinfo=UTC),
+        published_before=datetime(2026, 10, 19, tzinfo=UTC),
+    )
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["published_after"] == int(datetime(2026, 10, 1, tzinfo=UTC).timestamp())
+    assert params["published_before"] == int(datetime(2026, 10, 19, tzinfo=UTC).timestamp())
 
 
 async def test_transport_error_becomes_domain_error(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -87,7 +87,7 @@ metadata; errors use the documented envelope
 | `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
 | `POST` | `/api/v1/feeds/intake` | Validate and add feeds from a URL list or an OPML export |
 | `GET` | `/api/v1/categories` | List reader categories |
-| `GET` | `/api/v1/entries` | List entries with filters and pagination |
+| `GET` | `/api/v1/entries` | List entries with filters, publication period, and pagination |
 | `PATCH` | `/api/v1/entries/{id}` | Set read or unread status |
 | `GET` | `/api/v1/opml/export` | Export subscriptions as OPML |
 | `POST` | `/api/v1/opml/import` | Deprecated: stores the OPML without validating its feeds |
@@ -109,6 +109,11 @@ Each report row states the category that was applied and, separately, the
 folders that were only found in the source document. The reader holds one
 category per feed, so the extra folders are kept in the NAF database and can be
 read from `GET /api/v1/feeds/folders`.
+
+`GET /api/v1/entries` accepts `published_after` and `published_before` as
+ISO-8601 timestamps, which are read as UTC when they carry no zone and
+combine with the other filters. The period is the basis for the reports that
+cover "this week" or "since the last one".
 
 ## Documentation
 

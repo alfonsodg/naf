@@ -1,6 +1,7 @@
 """Reader port. Reader state is owned by Miniflux, never by NAF."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any
 
 
@@ -25,6 +26,8 @@ class FeedReader(ABC):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """List entries honoring every optional filter."""
 
@@ -38,6 +41,8 @@ class FeedReader(ABC):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """List one page of entries and report the unpaginated total."""
 

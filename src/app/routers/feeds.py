@@ -1,5 +1,6 @@
 """Feed and entry API. Reader state is owned by Miniflux."""
 
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
@@ -46,6 +47,15 @@ def _unavailable(exc: MinifluxAPIError) -> HTTPException:
 def _invalid(code: str, message: str, details: list[dict[str, Any]] | None = None) -> HTTPException:
     """Translate an input problem into the documented error envelope."""
     return HTTPException(status_code=422, detail=error_body(code, message, details))
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    """Return the instant in UTC, reading a naive value as already UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 @router.get("/feeds")
@@ -177,6 +187,8 @@ async def list_entries(
     search: str | None = None,
     read: bool | None = None,
     starred: bool | None = None,
+    published_after: datetime | None = None,
+    published_before: datetime | None = None,
 ) -> dict[str, Any]:
     """List normalized entries preserving provenance, with pagination metadata."""
     offset = (page - 1) * per_page
@@ -189,6 +201,8 @@ async def list_entries(
             search=search,
             read=read,
             starred=starred,
+            published_after=_utc(published_after),
+            published_before=_utc(published_before),
         )
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc

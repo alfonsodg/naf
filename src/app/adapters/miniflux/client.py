@@ -1,5 +1,6 @@
 """Miniflux reader adapter. Access is strictly through the REST API."""
 
+from datetime import datetime
 from typing import Any, cast
 
 import httpx
@@ -77,6 +78,8 @@ class MinifluxClient(FeedReader):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """List entries with optional filters."""
         entries, _ = await self.get_entries_page(
@@ -87,6 +90,8 @@ class MinifluxClient(FeedReader):
             starred=starred,
             read=read,
             search=search,
+            published_after=published_after,
+            published_before=published_before,
         )
         return entries
 
@@ -99,6 +104,8 @@ class MinifluxClient(FeedReader):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """List one page of entries and return it with the total count."""
         params: dict[str, Any] = {"limit": limit, "offset": offset}
@@ -112,6 +119,10 @@ class MinifluxClient(FeedReader):
             params["status"] = "read" if read else "unread"
         if search:
             params["search"] = search
+        if published_after is not None:
+            params["published_after"] = int(published_after.timestamp())
+        if published_before is not None:
+            params["published_before"] = int(published_before.timestamp())
 
         response = await self._request("GET", "/v1/entries", params=params)
         payload = response.json()

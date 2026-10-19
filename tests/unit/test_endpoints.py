@@ -4,6 +4,7 @@ The reader adapter is stubbed at the port boundary so these tests exercise the
 routing, validation, serialization, and error translation layers only.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -98,6 +99,57 @@ def test_list_entries_computes_offset_from_page() -> None:
 
     assert response.status_code == 200
     assert response.json()["pagination"]["page"] == 3
+
+
+def test_the_publication_period_reaches_the_reader() -> None:
+    """A period is normalised to UTC and passed to the reader."""
+    captured: dict[str, Any] = {}
+
+    async def get_entries_page(self: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+        captured.update(kwargs)
+        return [], 0
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.MinifluxClient, "get_entries_page", get_entries_page)
+        response = client.get(
+            "/api/v1/entries",
+            params={"published_after": "2026-10-01T00:00:00", "published_before": "2026-10-19T12:00:00Z"},
+        )
+
+    assert response.status_code == 200
+    assert captured["published_after"] == datetime(2026, 10, 1, tzinfo=UTC)
+    assert captured["published_before"] == datetime(2026, 10, 19, 12, tzinfo=UTC)
+
+
+def test_a_naive_period_is_read_as_utc() -> None:
+    """A period without a zone is the same instant, not a local one."""
+    captured: dict[str, Any] = {}
+
+    async def get_entries_page(self: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+        captured.update(kwargs)
+        return [], 0
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.MinifluxClient, "get_entries_page", get_entries_page)
+        client.get("/api/v1/entries", params={"published_after": "2026-10-01T00:00:00"})
+
+    assert captured["published_after"] == datetime(2026, 10, 1, tzinfo=UTC)
+
+
+def test_entries_without_a_period_keep_the_current_behaviour() -> None:
+    """A request without the new parameters sends no period."""
+    captured: dict[str, Any] = {}
+
+    async def get_entries_page(self: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+        captured.update(kwargs)
+        return [], 0
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.MinifluxClient, "get_entries_page", get_entries_page)
+        client.get("/api/v1/entries")
+
+    assert captured["published_after"] is None
+    assert captured["published_before"] is None
 
 
 def test_patch_entry_updates_status() -> None:
