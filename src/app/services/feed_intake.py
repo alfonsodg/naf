@@ -11,6 +11,7 @@ would therefore reintroduce exactly the dead feeds this service exists to keep
 out, and it is not atomic.
 """
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,6 +46,7 @@ class IntakeRow:
     added: bool = False
     disabled: bool = False
     duplicate: bool = False
+    processed: bool = True
     categories: list[str] = field(default_factory=list)
     reason: str = ""
 
@@ -138,25 +140,52 @@ class FeedIntake:
         self.validator = validator
 
     async def add(self, candidates: list[CandidateFeed]) -> dict[str, Any]:
-        """Validate every candidate, add the usable ones, and report each one."""
-        probes = await self.validator.validate_many([candidate.url for candidate in candidates])
+        """Validate every candidate, add the usable ones, and report each one.
+
+        A batch larger than the configured limit, or one that runs out of its
+        time budget, is reported in full but only the candidates that fit are
+        probed, so the call stays inside the request budget. Sending the same
+        payload again continues where it stopped: the candidates already added
+        come back as duplicates.
+        """
+        deadline = time.monotonic() + settings.feed_intake_time_budget
+        limit = settings.feed_intake_max_batch
+        accepted = candidates[:limit]
+        deferred = candidates[limit:]
+
         existing = await self._existing_urls()
         categories = await self._category_index()
 
         rows: list[IntakeRow] = []
-        for candidate, probe in zip(candidates, probes, strict=True):
-            rows.append(await self._process(candidate, probe, existing, categories))
+        for chunk in _chunks(accepted, settings.feed_validation_concurrency):
+            if time.monotonic() >= deadline:
+                break
+            probes = await self.validator.validate_many(
+                [candidate.url for candidate in chunk],
+                timeout=max(0.1, deadline - time.monotonic()),
+            )
+            for candidate, probe in zip(chunk, probes, strict=True):
+                rows.append(await self._process(candidate, probe, existing, categories))
+
+        processed = len(rows)
+        rows.extend(_not_processed_rows(accepted[processed:] + deferred))
 
         summary = {
             "received": len(candidates),
+            "processed": processed,
+            "not_processed": len(candidates) - processed,
             "added": sum(1 for row in rows if row.added),
             "already_present": sum(1 for row in rows if row.duplicate),
-            "rejected": sum(1 for row in rows if not row.added and not row.duplicate),
+            "rejected": sum(1 for row in rows if row.processed and not row.added and not row.duplicate),
             "by_verdict": _count_verdicts(rows),
         }
         logger.info(
             "feed intake finished",
-            extra={"received": summary["received"], "added": summary["added"]},
+            extra={
+                "received": summary["received"],
+                "added": summary["added"],
+                "not_processed": summary["not_processed"],
+            },
         )
         return {"summary": summary, "feeds": [_row_payload(row) for row in rows]}
 
@@ -282,6 +311,28 @@ def _count_verdicts(rows: list[IntakeRow]) -> dict[str, int]:
     return counts
 
 
+def _chunks(candidates: list[CandidateFeed], size: int) -> list[list[CandidateFeed]]:
+    """Split the candidates into batches small enough to keep the budget."""
+    return [candidates[index : index + size] for index in range(0, len(candidates), size)]
+
+
+def _not_processed_rows(candidates: list[CandidateFeed]) -> list[IntakeRow]:
+    """Report the candidates the batch limit or the time budget left out.
+
+    They are reported, never dropped, so the user knows the payload was only
+    partly handled and can send it again to continue.
+    """
+    return [
+        IntakeRow(
+            url=candidate.url,
+            verdict=str(FeedVerdict.NOT_PROCESSED),
+            processed=False,
+            reason="the intake budget was reached; send the remaining URLs again to continue",
+        )
+        for candidate in candidates
+    ]
+
+
 def _row_payload(row: IntakeRow) -> dict[str, Any]:
     """Serialize one intake row for the HTTP response."""
     return {
@@ -292,6 +343,7 @@ def _row_payload(row: IntakeRow) -> dict[str, Any]:
         "added": row.added,
         "disabled": row.disabled,
         "duplicate": row.duplicate,
+        "processed": row.processed,
         "categories": row.categories,
         "reason": row.reason,
     }

@@ -170,6 +170,12 @@ exactly one verdict:
 | `timeout` | no response within the configured limit | reported, not added |
 | `blocked` | forbidden scheme, host, or redirect target | reported, not added |
 
+`not_processed` is not a probe verdict but a report outcome: the batch limit
+or the time budget left that candidate out. It is reported so the caller knows
+the payload was only partly handled, and sending the same payload again
+continues where the call stopped, because the candidates already added come
+back as duplicates.
+
 `throttled` is deliberately distinct: a host that refuses automated clients
 (Reddit, several CDNs) still serves the same feed to a browser. Treating that
 as a dead feed would discard a valid subscription, so it is added paused rather
@@ -180,6 +186,14 @@ before inserting it; `POST /v1/import` inserts straight into the database
 without fetching anything and is not atomic. Bulk intake therefore uses the
 per-feed endpoint and keeps its own report, and `POST /opml/import` is
 deprecated.
+
+**Intake stays inside the request budget.** A global limit bounds the probes
+of one batch and a second limit bounds the probes against a single host, so a
+catalogue that points many URLs at one server never floods it. A host that
+answers `429` is retried after the delay it asks for, and the number of
+retries is bounded. The batch is bounded in size and in time as well, so a
+large import cannot outlast the reverse proxy and leave the caller without a
+report.
 
 **SSRF is refused before the network.** Only `http` and `https` are accepted;
 credentials in the authority, loopback, private, link-local, reserved, and

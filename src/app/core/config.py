@@ -56,10 +56,38 @@ class Settings(BaseSettings):
         le=10,
         description="Redirect hops followed while validating a feed",
     )
+    feed_validation_per_host_concurrency: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        description="Maximum parallel probes against the same host",
+    )
+    feed_validation_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Retries after a host asks the client to wait",
+    )
+    feed_validation_retry_backoff: float = Field(
+        default=1.0,
+        gt=0,
+        description="Base delay in seconds between retries of a refused request",
+    )
     feed_intake_max_bytes: int = Field(
         default=1_000_000,
         gt=0,
         description="Largest accepted intake payload or feed response body",
+    )
+    feed_intake_max_batch: int = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="Maximum candidates probed in one intake request",
+    )
+    feed_intake_time_budget: float = Field(
+        default=25.0,
+        gt=0,
+        description="Seconds one intake request may spend probing candidates",
     )
 
     # LLM adapter

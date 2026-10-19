@@ -1,5 +1,6 @@
 """Feed validator: every verdict is distinguishable and correctly attributed."""
 
+import asyncio
 import socket
 
 import httpx
@@ -7,6 +8,7 @@ import pytest
 
 from app.adapters.http import feed_validator
 from app.adapters.http.feed_validator import HttpFeedValidator
+from app.core.config import settings
 from app.core.ports.feed_validator import FeedVerdict
 
 RSS_WITH_ITEMS = """<?xml version="1.0"?>
@@ -333,6 +335,86 @@ async def test_validate_many_preserves_input_order(
         FeedVerdict.HTTP_ERROR,
         FeedVerdict.HTTP_ERROR,
     ]
+
+
+async def test_one_host_is_never_probed_beyond_its_limit(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A catalogue pointing many URLs at one server never floods it."""
+    active = 0
+    peak = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    urls = [f"https://same.test/feed/{index}" for index in range(8)]
+
+    await validator.validate_many(urls)
+
+    assert peak <= settings.feed_validation_per_host_concurrency
+
+
+async def test_different_hosts_are_probed_in_parallel(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-host limit does not serialize the whole batch."""
+    active = 0
+    peak = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    urls = [f"https://host{index}.test/feed" for index in range(4)]
+
+    await validator.validate_many(urls)
+
+    assert peak > 1
+
+
+async def test_a_rate_limited_host_is_retried(validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host that asks the client to wait is retried after the delay."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(429, headers={"retry-after": "0"})
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://example.test/feed")
+
+    assert attempts == 2
+    assert probe.verdict is FeedVerdict.ALIVE
+
+
+async def test_the_retries_are_bounded(validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host that keeps refusing cannot hold the request open."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(429, headers={"retry-after": "0"})
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://example.test/feed")
+
+    assert attempts == settings.feed_validation_max_retries + 1
+    assert probe.verdict is FeedVerdict.THROTTLED
 
 
 async def test_validate_many_without_input_returns_empty(validator: HttpFeedValidator) -> None:

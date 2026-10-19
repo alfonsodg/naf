@@ -98,6 +98,12 @@ row per input URL. Only a feed that answered with real entries is added enabled;
 a host that blocks automated clients is reported and added paused, never
 discarded. See `docs/STANDARDS.md` for the verdicts and the safety rules.
 
+The intake keeps itself inside the request budget: probes run in parallel but
+never more than a few against the same host, and a payload larger than the
+configured batch limit is reported in full while only the candidates that fit
+are probed. The rest come back as `not_processed`, so sending the same payload
+again continues where the call stopped.
+
 ## Documentation
 
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.

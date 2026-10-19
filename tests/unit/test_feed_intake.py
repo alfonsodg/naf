@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
 from app.core.ports.feed_validator import FeedProbe, FeedVerdict
 from app.services.feed_intake import (
@@ -87,7 +88,7 @@ class StubValidator:
             item_count=3 if verdict is FeedVerdict.ALIVE else 0,
         )
 
-    async def validate_many(self, urls: list[str]) -> list[FeedProbe]:
+    async def validate_many(self, urls: list[str], timeout: float | None = None) -> list[FeedProbe]:
         return [await self.validate(url) for url in urls]
 
 
@@ -428,3 +429,61 @@ def test_opml_outline_without_a_name_keeps_the_parent_category() -> None:
     candidates = parse_opml(document)
 
     assert candidates[0].categories == ("Tech",)
+
+
+# --- batch budget ------------------------------------------------------------
+
+
+async def test_a_batch_over_the_limit_reports_every_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A payload larger than the limit is reported in full, not cut silently."""
+    monkeypatch.setattr(settings, "feed_intake_max_batch", 2)
+    service, _ = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(5)]
+
+    result = await service.add(candidates)
+
+    assert result["summary"]["received"] == 5
+    assert result["summary"]["processed"] == 2
+    assert result["summary"]["not_processed"] == 3
+    assert len(result["feeds"]) == 5
+    assert [row["processed"] for row in result["feeds"]] == [True, True, False, False, False]
+    assert result["feeds"][2]["verdict"] == "not_processed"
+    assert result["feeds"][2]["reason"]
+
+
+async def test_the_overflow_is_never_added_to_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A candidate the budget left out is not written to the reader."""
+    monkeypatch.setattr(settings, "feed_intake_max_batch", 1)
+    service, reader = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(3)]
+
+    await service.add(candidates)
+
+    assert [feed["feed_url"] for feed in reader.created_feeds] == ["https://a.test/0"]
+
+
+async def test_an_exhausted_time_budget_leaves_the_rest_unprocessed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A batch that runs out of time is reported, never silently cut."""
+    monkeypatch.setattr(settings, "feed_intake_time_budget", 0.0)
+    service, _ = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(3)]
+
+    result = await service.add(candidates)
+
+    assert result["summary"]["processed"] == 0
+    assert result["summary"]["not_processed"] == 3
+    assert all(row["verdict"] == "not_processed" for row in result["feeds"])
+
+
+async def test_a_batch_inside_the_limit_is_fully_processed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A payload that fits is probed and added as before."""
+    monkeypatch.setattr(settings, "feed_intake_max_batch", 50)
+    service, reader = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(3)]
+
+    result = await service.add(candidates)
+
+    assert result["summary"]["processed"] == 3
+    assert result["summary"]["not_processed"] == 0
+    assert result["summary"]["added"] == 3
+    assert len(reader.created_feeds) == 3

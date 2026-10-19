@@ -91,7 +91,7 @@ def stub_collaborators(monkeypatch: pytest.MonkeyPatch) -> None:
     async def validate(self: Any, url: str) -> FeedProbe:
         return _probe(url)
 
-    async def validate_many(self: Any, urls: list[str]) -> list[FeedProbe]:
+    async def validate_many(self: Any, urls: list[str], timeout: float | None = None) -> list[FeedProbe]:
         return [_probe(url) for url in urls]
 
     monkeypatch.setattr(feeds.MinifluxClient, "list_feeds", list_feeds)
