@@ -81,6 +81,7 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/health/ready` | Readiness: PostgreSQL and Miniflux |
 | `GET` | `/api/v1/feeds` | List feeds with health metadata |
 | `GET` | `/api/v1/feeds/health` | Freshness and parsing status per feed |
+| `GET` | `/api/v1/feeds/folders` | Folders found for the feeds, besides the applied category |
 | `POST` | `/api/v1/feeds` | Validate and add one feed, optionally into a category |
 | `PATCH` | `/api/v1/feeds/{id}` | Rename, move to another category, or pause a feed |
 | `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
@@ -103,6 +104,11 @@ never more than a few against the same host, and a payload larger than the
 configured batch limit is reported in full while only the candidates that fit
 are probed. The rest come back as `not_processed`, so sending the same payload
 again continues where the call stopped.
+
+Each report row states the category that was applied and, separately, the
+folders that were only found in the source document. The reader holds one
+category per feed, so the extra folders are kept in the NAF database and can be
+read from `GET /api/v1/feeds/folders`.
 
 ## Documentation
 

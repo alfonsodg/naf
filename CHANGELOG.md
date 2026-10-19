@@ -33,6 +33,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - OPML parsing that preserves folder nesting as categories and reports a feed
   appearing under several tags instead of keeping only the first, which is what
   Miniflux's own importer does.
+- The intake report now names the category that was applied and the folders
+  that were only reported, separately. The reported folders are kept in the NAF
+  database and readable through `GET /api/v1/feeds/folders`, because the reader
+  holds one category per feed.
 - Settings `NAF_FEED_VALIDATION_TIMEOUT`, `NAF_FEED_VALIDATION_CONCURRENCY`,
   `NAF_FEED_VALIDATION_MAX_REDIRECTS`, and `NAF_FEED_INTAKE_MAX_BYTES` in every
   environment file.

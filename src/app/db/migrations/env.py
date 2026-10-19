@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "src"))
 
 from app.core.config import settings
 from app.db.base import Base
-from app.models import audio, digest, entities, ingestion  # noqa: F401
+from app.models import audio, digest, entities, feed_folders, ingestion  # noqa: F401
 
 config = context.config
 

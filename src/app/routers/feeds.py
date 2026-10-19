@@ -2,21 +2,25 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
+from sqlalchemy.orm import Session
 
 from app.adapters.http.feed_validator import HttpFeedValidator
 from app.adapters.miniflux.client import MinifluxClient
 from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
+from app.db.session import get_session
 from app.schemas.errors import error_body
 from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
 from app.services.collector import Collector, normalize_entry
+from app.services.feed_folders import FeedFolderStore
 from app.services.feed_intake import CandidateFeed, FeedIntake, parse_opml, parse_url_list
 
 router = APIRouter()
 
 LimitQuery = Annotated[int, Query(ge=1, le=500, description="Items per page")]
 PageQuery = Annotated[int, Query(ge=1, description="Page number, 1-based")]
+SessionDep = Annotated[Session, Depends(get_session)]
 
 
 def _client() -> MinifluxClient:
@@ -29,9 +33,9 @@ def _collector() -> Collector:
     return Collector(_client())
 
 
-def _intake() -> FeedIntake:
-    """Build the intake service bound to the reader and the HTTP validator."""
-    return FeedIntake(_client(), HttpFeedValidator())
+def _intake(session: Session) -> FeedIntake:
+    """Build the intake service bound to the reader, the validator, and the store."""
+    return FeedIntake(_client(), HttpFeedValidator(), FeedFolderStore(session))
 
 
 def _unavailable(exc: MinifluxAPIError) -> HTTPException:
@@ -63,14 +67,14 @@ async def feeds_health() -> list[dict[str, Any]]:
 
 
 @router.post("/feeds", status_code=201)
-async def create_feed(payload: FeedCreateRequest) -> dict[str, Any]:
+async def create_feed(payload: FeedCreateRequest, session: SessionDep) -> dict[str, Any]:
     """Validate one feed and add it when it answers with real entries."""
     candidate = CandidateFeed(
         url=payload.feed_url,
         categories=(payload.category,) if payload.category else (),
     )
     try:
-        result = await _intake().add([candidate])
+        result = await _intake(session).add([candidate])
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
 
@@ -124,7 +128,7 @@ async def list_categories() -> list[dict[str, Any]]:
 
 
 @router.post("/feeds/intake", status_code=201)
-async def intake_feeds(request: Request) -> dict[str, Any]:
+async def intake_feeds(request: Request, session: SessionDep) -> dict[str, Any]:
     """Validate and add feeds from a pasted URL list or an OPML document.
 
     A plain-text body is read as one URL per line. A body carrying XML is read
@@ -153,9 +157,15 @@ async def intake_feeds(request: Request) -> dict[str, Any]:
         raise _invalid("FEED_INTAKE_EMPTY", "no feed URL was found in the payload")
 
     try:
-        return {"data": await _intake().add(candidates)}
+        return {"data": await _intake(session).add(candidates)}
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
+
+
+@router.get("/feeds/folders")
+async def list_feed_folders(session: SessionDep) -> dict[str, Any]:
+    """List the folders found for the feeds, besides the applied category."""
+    return {"data": FeedFolderStore(session).list_folders()}
 
 
 @router.get("/entries")

@@ -23,6 +23,7 @@ from app.core.logging import get_logger
 from app.core.opml import build_feed_opml
 from app.core.ports.feed_reader import FeedReader
 from app.core.ports.feed_validator import FeedProbe, FeedValidator, FeedVerdict
+from app.services.feed_folders import FolderRecorder
 
 logger = get_logger(__name__)
 
@@ -48,7 +49,8 @@ class IntakeRow:
     disabled: bool = False
     duplicate: bool = False
     processed: bool = True
-    categories: list[str] = field(default_factory=list)
+    applied_category: str = ""
+    reported_categories: list[str] = field(default_factory=list)
     reason: str = ""
 
 
@@ -135,10 +137,11 @@ def parse_opml(document: str) -> list[CandidateFeed]:
 class FeedIntake:
     """Validate candidates and add the usable ones to the reader."""
 
-    def __init__(self, reader: FeedReader, validator: FeedValidator) -> None:
+    def __init__(self, reader: FeedReader, validator: FeedValidator, folders: FolderRecorder | None = None) -> None:
         """Bind the service to a reader and a validator."""
         self.reader = reader
         self.validator = validator
+        self.folders = folders
 
     async def add(self, candidates: list[CandidateFeed]) -> dict[str, Any]:
         """Validate every candidate, add the usable ones, and report each one.
@@ -203,7 +206,6 @@ class FeedIntake:
             verdict=str(probe.verdict),
             status_code=probe.status_code,
             item_count=probe.item_count,
-            categories=list(candidate.categories),
             reason=probe.reason,
         )
 
@@ -220,20 +222,25 @@ class FeedIntake:
         # and the reader import is the fallback that keeps the subscription
         # without fetching it.
         if probe.verdict is FeedVerdict.THROTTLED:
-            category_id = await self._category_for(candidate, categories)
+            category_id, applied = await self._category_for(candidate, categories)
+            row.applied_category = applied
+            row.reported_categories = list(candidate.categories[1:])
             try:
                 await self._create(candidate.url, category_id, disabled=True)
             except MinifluxAPIError as exc:
-                return await self._keep_unverified(candidate, exc)
+                return await self._keep_unverified(candidate, row, exc)
             row.added = True
             row.disabled = True
             row.reason = "host refused an automated client; added disabled and unverified"
+            self._record_folders(candidate.url, row.reported_categories)
             return row
 
         if probe.verdict is not FeedVerdict.ALIVE:
             return row
 
-        category_id = await self._category_for(candidate, categories)
+        category_id, applied = await self._category_for(candidate, categories)
+        row.applied_category = applied
+        row.reported_categories = list(candidate.categories[1:])
         try:
             await self._create(candidate.url, category_id, disabled=False)
         except MinifluxAPIError as exc:
@@ -250,24 +257,31 @@ class FeedIntake:
             return row
 
         row.added = True
+        self._record_folders(candidate.url, row.reported_categories)
         return row
 
-    async def _keep_unverified(self, candidate: CandidateFeed, exc: Exception) -> IntakeRow:
+    def _record_folders(self, feed_url: str, folders: list[str]) -> None:
+        """Keep the folders that were found but could not be applied."""
+        if not folders or self.folders is None:
+            return
+        try:
+            self.folders.record(feed_url, folders)
+        except Exception as exc:
+            # The folders are a convenience; losing them must never cost the
+            # subscription that was just added.
+            logger.warning("could not store the reported folders", extra={"url": feed_url, "error": type(exc).__name__})
+
+    async def _keep_unverified(self, candidate: CandidateFeed, row: IntakeRow, exc: Exception) -> IntakeRow:
         """Keep a feed whose host refuses automated clients, without fetching it.
 
         The reader's OPML import stores a feed without downloading it, and the
         document marks it as disabled, so the subscription survives and is not
         polled until the user asks for a refresh.
         """
-        row = IntakeRow(
-            url=candidate.url,
-            verdict=str(FeedVerdict.THROTTLED),
-            categories=list(candidate.categories),
-        )
         document = build_feed_opml(
             candidate.url,
             candidate.title,
-            candidate.categories[0] if candidate.categories else "",
+            row.applied_category,
         )
         try:
             await self.reader.import_opml(document)
@@ -280,22 +294,27 @@ class FeedIntake:
         row.added = True
         row.disabled = True
         row.reason = "host refused an automated client; added disabled and unverified"
+        self._record_folders(candidate.url, row.reported_categories)
         return row
 
-    async def _category_for(self, candidate: CandidateFeed, categories: dict[str, int]) -> int | None:
-        """Resolve, creating when absent, the category a candidate belongs to."""
+    async def _category_for(self, candidate: CandidateFeed, categories: dict[str, int]) -> tuple[int | None, str]:
+        """Resolve, creating when absent, the category a candidate belongs to.
+
+        Returns the category identifier and its title, so the report can say
+        which category was applied.
+        """
         if not candidate.categories:
-            return None
+            return None, ""
 
         name = candidate.categories[0]
         known = categories.get(name.lower())
         if known is not None:
-            return known
+            return known, name
 
         created = await self.reader.create_category(name)
         category_id = int(created["id"])
         categories[name.lower()] = category_id
-        return category_id
+        return category_id, name
 
     async def _create(self, url: str, category_id: int | None, *, disabled: bool) -> None:
         """Add one feed, degrading to an unverified entry when the reader refuses it."""
@@ -375,6 +394,7 @@ def _row_payload(row: IntakeRow) -> dict[str, Any]:
         "disabled": row.disabled,
         "duplicate": row.duplicate,
         "processed": row.processed,
-        "categories": row.categories,
+        "applied_category": row.applied_category,
+        "reported_categories": row.reported_categories,
         "reason": row.reason,
     }

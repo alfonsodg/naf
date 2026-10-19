@@ -83,10 +83,25 @@ class StubValidator:
         return [await self.validate(url) for url in urls]
 
 
-def _intake(verdicts: dict[str, FeedVerdict], reader: StubReader | None = None) -> tuple[FeedIntake, StubReader]:
+class StubFolders:
+    """Folder store double recording what the intake reports."""
+
+    def __init__(self) -> None:
+        self.recorded: list[tuple[str, list[str]]] = []
+
+    def record(self, feed_url: str, folders: list[str]) -> None:
+        """Record the folders reported for a feed."""
+        self.recorded.append((feed_url, folders))
+
+
+def _intake(
+    verdicts: dict[str, FeedVerdict],
+    reader: StubReader | None = None,
+    folders: StubFolders | None = None,
+) -> tuple[FeedIntake, StubReader]:
     """Build the service under test with both collaborators stubbed."""
     stub = reader or StubReader()
-    return FeedIntake(stub, StubValidator(verdicts)), stub  # type: ignore[arg-type]
+    return FeedIntake(stub, StubValidator(verdicts), folders), stub  # type: ignore[arg-type]
 
 
 # --- intake decisions --------------------------------------------------------
@@ -339,6 +354,66 @@ async def test_a_refused_creation_and_import_is_reported() -> None:
     row = result["feeds"][0]
     assert row["added"] is False
     assert "could not fetch it either" in row["reason"]
+
+
+# --- reported folders ---------------------------------------------------------
+
+
+async def test_the_report_separates_the_applied_category_from_the_reported_ones() -> None:
+    """A feed under several folders is applied to one and reports the rest."""
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE})
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech", "AI"))])
+
+    row = result["feeds"][0]
+    assert row["applied_category"] == "Tech"
+    assert row["reported_categories"] == ["AI"]
+
+
+async def test_the_reported_folders_are_kept() -> None:
+    """The extra folders survive the call, in NAF-owned storage."""
+    folders = StubFolders()
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE}, folders=folders)
+
+    await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech", "AI"))])
+
+    assert folders.recorded == [("https://a.test/feed", ["AI"])]
+
+
+async def test_a_feed_under_one_folder_applies_it() -> None:
+    """A single folder is applied and nothing else is reported."""
+    folders = StubFolders()
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE}, folders=folders)
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech",))])
+
+    row = result["feeds"][0]
+    assert row["applied_category"] == "Tech"
+    assert row["reported_categories"] == []
+    assert folders.recorded == []
+
+
+async def test_a_feed_without_a_folder_applies_nothing() -> None:
+    """A feed outside any folder has no category at all."""
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE})
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed")])
+
+    row = result["feeds"][0]
+    assert row["applied_category"] == ""
+    assert row["reported_categories"] == []
+
+
+async def test_a_rejected_feed_applies_no_category() -> None:
+    """A feed that was not added never claims a category."""
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.EMPTY})
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech", "AI"))])
+
+    row = result["feeds"][0]
+    assert row["added"] is False
+    assert row["applied_category"] == ""
+    assert row["reported_categories"] == []
 
 
 # --- batch budget ------------------------------------------------------------

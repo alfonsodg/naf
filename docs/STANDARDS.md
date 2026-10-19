@@ -192,6 +192,14 @@ deprecated. The import is used for one case only, a feed whose host refuses
 automated clients, where storing the subscription without downloading it is the
 whole point.
 
+**One feed, one applied category.** The reader holds a single category per
+feed, so a feed found under several folders is applied to the first one and
+the rest are only reported. The report names the applied category and the
+reported folders separately, so it never claims an organisation the reader does
+not have. The reported folders are NAF-owned data, kept in `feed_folders` and
+readable through `GET /api/v1/feeds/folders`, because they are the only trace
+of the tags the user had.
+
 **Intake stays inside the request budget.** A global limit bounds the probes
 of one batch and a second limit bounds the probes against a single host, so a
 catalogue that points many URLs at one server never floods it. A host that
