@@ -13,7 +13,7 @@ from app.core.exceptions import MinifluxAPIError
 from app.db.session import get_session
 from app.schemas.errors import error_body
 from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
-from app.services.collector import Collector, normalize_entry
+from app.services.collector import Collector, normalize_entry, normalize_feed
 from app.services.feed_folders import FeedFolderStore
 from app.services.feed_intake import CandidateFeed, FeedIntake, parse_opml, parse_url_list
 
@@ -62,9 +62,10 @@ def _utc(value: datetime | None) -> datetime | None:
 async def list_feeds() -> list[dict[str, Any]]:
     """List configured feeds with their health metadata."""
     try:
-        return await _client().list_feeds()
+        feeds = await _client().list_feeds()
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
+    return [normalize_feed(feed) for feed in feeds]
 
 
 @router.get("/feeds/health")

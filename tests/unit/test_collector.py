@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from app.services.collector import Collector, normalize_entry
+from app.services.collector import Collector, normalize_entry, normalize_feed
 
 
 class StubReader:
@@ -106,6 +106,33 @@ def test_normalize_entry_defaults_the_attachments_and_the_tags() -> None:
 
     assert normalized["enclosures"] == []
     assert normalized["tags"] == []
+
+
+def test_normalize_feed_projects_the_documented_fields() -> None:
+    """The feed is projected onto the fields this project defines."""
+    normalized = normalize_feed(
+        {
+            "id": 1,
+            "title": "Alpha",
+            "feed_url": "https://alpha.test/rss",
+            "site_url": "https://alpha.test",
+            "category": {"id": 7, "title": "Tech"},
+            "checked_at": "2026-10-18T10:00:00Z",
+            "parsing_error_count": 2,
+            "disabled": False,
+            "scraper_rules": "article",
+            "username": "reader-user",
+            "icon": {"id": 3, "data": "aW5jb24="},
+        }
+    )
+
+    assert normalized["feed_id"] == 1
+    assert normalized["url"] == "https://alpha.test/rss"
+    assert normalized["category"] == "Tech"
+    assert normalized["parsing_error_count"] == 2
+    assert "scraper_rules" not in normalized
+    assert "username" not in normalized
+    assert "icon" not in normalized
 
 
 async def test_collect_counts_entries_per_feed() -> None:

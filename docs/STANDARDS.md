@@ -161,6 +161,12 @@ refreshing, and removing a subscription. Removing one deletes the subscription
 from the reader and nothing else: the entries it carried and every NAF-owned
 record stay untouched, and no volume is ever removed with it.
 
+Every reader object is projected onto a shape this project defines before it
+leaves the API. The feed list, the feed health report, and the entry list each
+expose the fields documented in `README.md`, never the reader's own internals
+such as its scraping rules, the credentials of an authenticated feed, or its
+icon.
+
 ## Feed intake and validation
 
 A feed URL arriving from a pasted list, an OPML export, or a form field is

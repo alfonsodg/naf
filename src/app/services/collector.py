@@ -74,18 +74,7 @@ class Collector:
     async def health_report(self) -> list[dict[str, Any]]:
         """Summarize freshness and parsing status for every feed."""
         feeds = await self.feed_reader.list_feeds()
-        return [
-            {
-                "feed_id": feed.get("id"),
-                "title": feed.get("title"),
-                "url": feed.get("feed_url"),
-                "checked_at": feed.get("checked_at"),
-                "parsing_error_count": feed.get("parsing_error_count", 0),
-                "parsing_error_message": feed.get("parsing_error_message", ""),
-                "disabled": feed.get("disabled", False),
-            }
-            for feed in feeds
-        ]
+        return [normalize_feed(feed) for feed in feeds]
 
 
 def _is_after(entry: dict[str, Any], since: datetime) -> bool:
@@ -102,6 +91,27 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def normalize_feed(feed: dict[str, Any]) -> dict[str, Any]:
+    """Map a reader feed to the NAF shape, hiding the reader internals.
+
+    The reader object carries scraper and blocklist rules, the credentials of
+    an authenticated feed, and a base64 icon. None of that belongs in the
+    complement's API.
+    """
+    category = feed.get("category") or {}
+    return {
+        "feed_id": feed.get("id"),
+        "title": feed.get("title"),
+        "url": feed.get("feed_url"),
+        "site_url": feed.get("site_url"),
+        "category": category.get("title") if isinstance(category, dict) else None,
+        "checked_at": feed.get("checked_at"),
+        "parsing_error_count": feed.get("parsing_error_count", 0),
+        "parsing_error_message": feed.get("parsing_error_message", ""),
+        "disabled": feed.get("disabled", False),
+    }
 
 
 def normalize_entry(entry: dict[str, Any]) -> dict[str, Any]:

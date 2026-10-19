@@ -59,6 +59,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Typed configuration with fail-fast required values and the `NAF_`
   environment prefix.
 - Miniflux reader adapter (REST API only) with normalized error handling.
+- The feed list is projected onto a NAF-owned shape, the same one the feed
+  health report uses, so the reader's own fields, its scraping rules, the
+  credentials of an authenticated feed, and its icon never reach the API.
 - Ingestion collector with per-feed failure isolation and preserved
   provenance.
 - README/entry endpoints for health, feeds, feed health, entries, read status,

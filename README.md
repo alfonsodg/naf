@@ -120,6 +120,12 @@ cover "this week" or "since the last one".
 Every entry carries the attachments and the tags the feed provided, so an
 audio enclosure is never lost on the way to a report.
 
+`GET /api/v1/feeds` and `GET /api/v1/feeds/health` return the same projected
+shape: the identifier, the title, the feed and site addresses, the category,
+the last check, the parsing errors, and the paused state. The reader's own
+fields, such as its scraping rules, the credentials of an authenticated feed,
+or its icon, never reach the API.
+
 ## Documentation
 
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.

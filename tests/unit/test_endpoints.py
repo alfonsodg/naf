@@ -28,9 +28,14 @@ def stub_reader(monkeypatch: pytest.MonkeyPatch) -> None:
                 "id": 1,
                 "title": "Alpha",
                 "feed_url": "https://alpha.test/rss",
+                "site_url": "https://alpha.test",
+                "category": {"id": 7, "title": "Tech"},
                 "checked_at": "2026-10-18T10:00:00Z",
                 "parsing_error_count": 0,
                 "disabled": False,
+                "scraper_rules": "article",
+                "username": "reader-user",
+                "icon": {"id": 3, "data": "aW5jb24="},
             }
         ]
 
@@ -77,12 +82,27 @@ def stub_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(feeds.MinifluxClient, "import_opml", import_opml)
 
 
-def test_list_feeds_returns_reader_payload() -> None:
-    """GET /feeds proxies feed metadata without reshaping it."""
+def test_list_feeds_returns_the_projected_shape() -> None:
+    """GET /feeds returns the shape this project defines."""
     response = client.get("/api/v1/feeds")
 
     assert response.status_code == 200
-    assert response.json()[0]["title"] == "Alpha"
+    body = response.json()[0]
+    assert body["feed_id"] == 1
+    assert body["title"] == "Alpha"
+    assert body["url"] == "https://alpha.test/rss"
+    assert body["site_url"] == "https://alpha.test"
+    assert body["category"] == "Tech"
+
+
+def test_list_feeds_hides_the_reader_internals() -> None:
+    """The reader rules, the credentials, and the icon never reach the API."""
+    response = client.get("/api/v1/feeds")
+
+    body = response.json()[0]
+    assert "scraper_rules" not in body
+    assert "username" not in body
+    assert "icon" not in body
 
 
 def test_feeds_health_reports_parsing_state() -> None:
