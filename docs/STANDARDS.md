@@ -179,13 +179,18 @@ back as duplicates.
 `throttled` is deliberately distinct: a host that refuses automated clients
 (Reddit, several CDNs) still serves the same feed to a browser. Treating that
 as a dead feed would discard a valid subscription, so it is added paused rather
-than dropped.
+than dropped. The reader downloads the feed before storing it, even when the
+creation asks for a disabled feed, so the creation is attempted first and, when
+the reader refuses it too, the feed is stored through the reader's OPML import,
+which downloads nothing and marks the feed as disabled.
 
 **Feeds are created one at a time.** `POST /v1/feeds` fetches and parses a feed
 before inserting it; `POST /v1/import` inserts straight into the database
 without fetching anything and is not atomic. Bulk intake therefore uses the
 per-feed endpoint and keeps its own report, and `POST /opml/import` is
-deprecated.
+deprecated. The import is used for one case only, a feed whose host refuses
+automated clients, where storing the subscription without downloading it is the
+whole point.
 
 **Intake stays inside the request budget.** A global limit bounds the probes
 of one batch and a second limit bounds the probes against a single host, so a

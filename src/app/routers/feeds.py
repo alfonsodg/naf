@@ -39,9 +39,9 @@ def _unavailable(exc: MinifluxAPIError) -> HTTPException:
     return HTTPException(status_code=502, detail=error_body("MINIFLUX_UNAVAILABLE", str(exc)))
 
 
-def _invalid(code: str, message: str) -> HTTPException:
+def _invalid(code: str, message: str, details: list[dict[str, Any]] | None = None) -> HTTPException:
     """Translate an input problem into the documented error envelope."""
-    return HTTPException(status_code=422, detail=error_body(code, message))
+    return HTTPException(status_code=422, detail=error_body(code, message, details))
 
 
 @router.get("/feeds")
@@ -76,7 +76,11 @@ async def create_feed(payload: FeedCreateRequest) -> dict[str, Any]:
 
     row = result["feeds"][0]
     if not row["added"]:
-        raise _invalid("FEED_REJECTED", row["reason"] or "the feed could not be validated")
+        raise _invalid(
+            "FEED_REJECTED",
+            row["reason"] or "the feed could not be validated",
+            [{"url": row["url"], "verdict": row["verdict"], "status_code": row["status_code"]}],
+        )
     return {"data": row}
 
 

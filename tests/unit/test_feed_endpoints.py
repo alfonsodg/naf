@@ -251,6 +251,16 @@ def test_create_feed_rejects_a_dead_feed() -> None:
     assert response.json()["detail"]["error"]["code"] == "FEED_REJECTED"
 
 
+def test_the_refusal_names_the_verdict_and_the_status() -> None:
+    """The client can tell a blocked host apart from a dead feed."""
+    response = client.post("/api/v1/feeds", json={"feed_url": "https://gone.test/dead"})
+
+    details = response.json()["detail"]["error"]["details"]
+    assert details[0]["url"] == "https://gone.test/dead"
+    assert details[0]["verdict"]
+    assert "status_code" in details[0]
+
+
 def test_patch_feed_pauses_it() -> None:
     """PATCH /feeds/{id} can disable a feed."""
     response = client.patch("/api/v1/feeds/12", json={"disabled": True})

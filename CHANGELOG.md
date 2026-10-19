@@ -16,6 +16,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Feed validation with six distinct verdicts: `alive`, `empty`, `http_error`,
   `throttled`, `timeout`, and `blocked`. Only `alive` feeds are added enabled;
   `throttled` feeds are added disabled as unverified instead of being discarded.
+- A `throttled` feed whose host also refuses the reader is now kept through the
+  reader's OPML import, which stores the subscription without downloading it,
+  so the documented promise of never discarding it holds. A refused creation
+  reports the verdict and the HTTP status in the error envelope.
 - Single-feed management: `POST /feeds` (validated add with an optional
   category), `PATCH /feeds/{id}` (rename, move category, pause), and
   `POST /feeds/{id}/refresh`; `GET /categories` lists reader categories.

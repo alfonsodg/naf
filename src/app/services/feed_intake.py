@@ -20,6 +20,7 @@ from defusedxml.ElementTree import ParseError, fromstring
 from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
 from app.core.logging import get_logger
+from app.core.opml import build_feed_opml
 from app.core.ports.feed_reader import FeedReader
 from app.core.ports.feed_validator import FeedProbe, FeedValidator, FeedVerdict
 
@@ -212,18 +213,18 @@ class FeedIntake:
             return row
 
         # A throttled feed is not dead: the host refuses automated clients while
-        # the feed may be perfectly valid. Miniflux cannot store it, though: it
-        # fetches the feed even when the creation requests `disabled`, and its
-        # fetch is refused exactly like this probe was. The attempt is made so a
-        # host that blocks one client but not the other can still be added, and
-        # a refusal is reported as unverified rather than as dead.
+        # the feed may be perfectly valid. The reader fetches the feed before
+        # storing it, even when the creation requests `disabled`, so its fetch
+        # is refused exactly like this probe was. The attempt is made first so
+        # a host that blocks one client but not the other can still be added,
+        # and the reader import is the fallback that keeps the subscription
+        # without fetching it.
         if probe.verdict is FeedVerdict.THROTTLED:
             category_id = await self._category_for(candidate, categories)
             try:
                 await self._create(candidate.url, category_id, disabled=True)
             except MinifluxAPIError as exc:
-                row.reason = f"the host blocks automated clients and the reader could not fetch it either: {exc}"
-                return row
+                return await self._keep_unverified(candidate, exc)
             row.added = True
             row.disabled = True
             row.reason = "host refused an automated client; added disabled and unverified"
@@ -249,6 +250,36 @@ class FeedIntake:
             return row
 
         row.added = True
+        return row
+
+    async def _keep_unverified(self, candidate: CandidateFeed, exc: Exception) -> IntakeRow:
+        """Keep a feed whose host refuses automated clients, without fetching it.
+
+        The reader's OPML import stores a feed without downloading it, and the
+        document marks it as disabled, so the subscription survives and is not
+        polled until the user asks for a refresh.
+        """
+        row = IntakeRow(
+            url=candidate.url,
+            verdict=str(FeedVerdict.THROTTLED),
+            categories=list(candidate.categories),
+        )
+        document = build_feed_opml(
+            candidate.url,
+            candidate.title,
+            candidate.categories[0] if candidate.categories else "",
+        )
+        try:
+            await self.reader.import_opml(document)
+        except MinifluxAPIError as import_exc:
+            logger.warning("reader refused to import an unverified feed", extra={"url": candidate.url})
+            row.reason = f"the host blocks automated clients and the reader could not fetch it either: {exc}"
+            row.reason = f"{row.reason}; the import failed with: {import_exc}"
+            return row
+
+        row.added = True
+        row.disabled = True
+        row.reason = "host refused an automated client; added disabled and unverified"
         return row
 
     async def _category_for(self, candidate: CandidateFeed, categories: dict[str, int]) -> int | None:
