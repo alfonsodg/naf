@@ -156,6 +156,11 @@ is accessed only through its REST API. Accessing Miniflux tables directly is
 prohibited. NAF owns digests, citations, audio assets, classification, and
 ingestion runs in its own PostgreSQL database.
 
+The NAF API owns the feed write surface: adding, renaming, moving, pausing,
+refreshing, and removing a subscription. Removing one deletes the subscription
+from the reader and nothing else: the entries it carried and every NAF-owned
+record stay untouched, and no volume is ever removed with it.
+
 ## Feed intake and validation
 
 A feed URL arriving from a pasted list, an OPML export, or a form field is

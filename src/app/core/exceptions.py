@@ -13,6 +13,11 @@ class NafError(Exception):
 class MinifluxAPIError(NafError):
     """Error communicating with the Miniflux API."""
 
+    def __init__(self, message: str = "", status_code: int | None = None) -> None:
+        """Store the message and the HTTP status that caused it."""
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class ClassificationError(NafError):
     """Error during classification."""

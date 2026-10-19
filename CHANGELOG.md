@@ -21,7 +21,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   so the documented promise of never discarding it holds. A refused creation
   reports the verdict and the HTTP status in the error envelope.
 - Single-feed management: `POST /feeds` (validated add with an optional
-  category), `PATCH /feeds/{id}` (rename, move category, pause), and
+  category), `PATCH /feeds/{id}` (rename, move category, pause),
+  `DELETE /feeds/{id}` (remove the subscription), and
   `POST /feeds/{id}/refresh`; `GET /categories` lists reader categories.
 - Entries can be filtered by publication period: `GET /api/v1/entries` accepts
   `published_after` and `published_before` as ISO-8601 timestamps, read as UTC

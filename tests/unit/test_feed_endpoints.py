@@ -34,6 +34,7 @@ class _ReaderState:
         self.created_feeds: list[dict[str, Any]] = []
         self.created_categories: list[str] = []
         self.updated: list[dict[str, Any]] = []
+        self.deleted: list[int] = []
         self.existing: list[str] = []
 
     def reset(self) -> None:
@@ -41,6 +42,7 @@ class _ReaderState:
         self.created_feeds.clear()
         self.created_categories.clear()
         self.updated.clear()
+        self.deleted.clear()
         self.existing.clear()
 
 
@@ -88,6 +90,10 @@ def stub_collaborators(monkeypatch: pytest.MonkeyPatch) -> None:
     async def refresh_feed(self: Any, feed_id: int) -> bool:
         return True
 
+    async def delete_feed(self: Any, feed_id: int) -> bool:
+        state.deleted.append(feed_id)
+        return True
+
     async def validate(self: Any, url: str) -> FeedProbe:
         return _probe(url)
 
@@ -100,6 +106,7 @@ def stub_collaborators(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(feeds.MinifluxClient, "create_feed", create_feed)
     monkeypatch.setattr(feeds.MinifluxClient, "update_feed", update_feed)
     monkeypatch.setattr(feeds.MinifluxClient, "refresh_feed", refresh_feed)
+    monkeypatch.setattr(feeds.MinifluxClient, "delete_feed", delete_feed)
     monkeypatch.setattr(feeds.HttpFeedValidator, "validate", validate)
     monkeypatch.setattr(feeds.HttpFeedValidator, "validate_many", validate_many)
 
@@ -354,6 +361,7 @@ def test_intake_response_is_json_serializable() -> None:
         ("post", "/api/v1/feeds", {"feed_url": "https://a.test/feed"}),
         ("patch", "/api/v1/feeds/12", {"disabled": True}),
         ("post", "/api/v1/feeds/12/refresh", None),
+        ("delete", "/api/v1/feeds/12", None),
         ("get", "/api/v1/categories", None),
     ],
 )
@@ -364,12 +372,35 @@ def test_reader_failure_translates_to_502(method: str, route: str, payload: dict
         raise MinifluxAPIError("reader down")
 
     with pytest.MonkeyPatch.context() as patch:
-        for name in ("list_feeds", "list_categories", "create_feed", "update_feed", "refresh_feed"):
+        for name in ("list_feeds", "list_categories", "create_feed", "update_feed", "refresh_feed", "delete_feed"):
             patch.setattr(feeds.MinifluxClient, name, failing)
         response = getattr(client, method)(route, **({"json": payload} if payload else {}))
 
     assert response.status_code == 502
     assert response.json()["detail"]["error"]["code"] == "MINIFLUX_UNAVAILABLE"
+
+
+def test_a_feed_is_deleted_from_the_reader() -> None:
+    """DELETE /feeds/{id} removes the subscription and says so."""
+    response = client.delete("/api/v1/feeds/12")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"feed_id": 12, "removed": True}
+    assert state.deleted == [12]
+
+
+def test_deleting_an_unknown_feed_is_not_found() -> None:
+    """A subscription the reader does not have is a 404, not a reader outage."""
+
+    async def missing(self: Any, feed_id: int) -> bool:
+        raise MinifluxAPIError("Miniflux /v1/feeds/12 returned 404", status_code=404)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.MinifluxClient, "delete_feed", missing)
+        response = client.delete("/api/v1/feeds/12")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"]["code"] == "FEED_NOT_FOUND"
 
 
 def test_blank_category_is_dropped() -> None:

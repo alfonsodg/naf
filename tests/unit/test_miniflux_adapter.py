@@ -96,6 +96,23 @@ async def test_get_entries_sends_the_publication_period(
     assert params["published_before"] == int(datetime(2026, 10, 19, tzinfo=UTC).timestamp())
 
 
+async def test_delete_feed_removes_the_subscription(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The delete call reaches the reader endpoint and reports the outcome."""
+    captured: dict[str, object] = {}
+
+    async def fake_request(method: str, path: str, **kwargs: object) -> httpx.Response:
+        captured["method"] = method
+        captured["path"] = path
+        return _response(204)
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    removed = await client.delete_feed(42)
+
+    assert removed is True
+    assert captured["method"] == "DELETE"
+    assert captured["path"] == "/v1/feeds/42"
+
+
 async def test_transport_error_becomes_domain_error(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Transport failures must surface as MinifluxAPIError."""
 

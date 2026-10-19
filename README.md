@@ -84,6 +84,7 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/feeds/folders` | Folders found for the feeds, besides the applied category |
 | `POST` | `/api/v1/feeds` | Validate and add one feed, optionally into a category |
 | `PATCH` | `/api/v1/feeds/{id}` | Rename, move to another category, or pause a feed |
+| `DELETE` | `/api/v1/feeds/{id}` | Remove one subscription from the reader |
 | `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
 | `POST` | `/api/v1/feeds/intake` | Validate and add feeds from a URL list or an OPML export |
 | `GET` | `/api/v1/categories` | List reader categories |

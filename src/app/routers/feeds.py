@@ -128,6 +128,25 @@ async def refresh_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
     return {"data": {"feed_id": feed_id, "refresh_requested": awaited}}
 
 
+@router.delete("/feeds/{feed_id}")
+async def delete_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
+    """Remove one subscription from the reader.
+
+    Only the subscription is removed. The entries it carried and every
+    NAF-owned record stay untouched.
+    """
+    try:
+        removed = await _client().delete_feed(feed_id)
+    except MinifluxAPIError as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=error_body("FEED_NOT_FOUND", "the reader does not have that subscription"),
+            ) from exc
+        raise _unavailable(exc) from exc
+    return {"data": {"feed_id": feed_id, "removed": removed}}
+
+
 @router.get("/categories")
 async def list_categories() -> list[dict[str, Any]]:
     """List the reader categories."""

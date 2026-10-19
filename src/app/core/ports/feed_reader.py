@@ -95,3 +95,7 @@ class FeedReader(ABC):
     @abstractmethod
     async def refresh_feed(self, feed_id: int) -> bool:
         """Ask the reader to refresh one feed now."""
+
+    @abstractmethod
+    async def delete_feed(self, feed_id: int) -> bool:
+        """Remove one subscription from the reader."""

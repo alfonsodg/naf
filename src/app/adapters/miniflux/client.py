@@ -54,7 +54,8 @@ class MinifluxClient(FeedReader):
             # would reduce every failure to a bare status code.
             detail = _error_message(exc.response)
             raise MinifluxAPIError(
-                f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else "")
+                f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else ""),
+                status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:
             raise MinifluxAPIError(f"Miniflux {path} request failed: {exc}") from exc
@@ -220,6 +221,11 @@ class MinifluxClient(FeedReader):
     async def refresh_feed(self, feed_id: int) -> bool:
         """Ask the reader to refresh one feed now."""
         response = await self._request("PUT", f"/v1/feeds/{feed_id}/refresh")
+        return response.status_code == httpx.codes.NO_CONTENT
+
+    async def delete_feed(self, feed_id: int) -> bool:
+        """Remove one subscription from the reader."""
+        response = await self._request("DELETE", f"/v1/feeds/{feed_id}")
         return response.status_code == httpx.codes.NO_CONTENT
 
 
