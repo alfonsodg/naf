@@ -7,6 +7,8 @@ decides whether it is usable by fetching it directly, so a catalogue's own
 
 import asyncio
 import re
+import socket
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import httpx
 
@@ -14,6 +16,7 @@ from app.core.config import settings
 from app.core.feed_urls import FeedURLError, validate_feed_url
 from app.core.logging import get_logger
 from app.core.ports.feed_validator import FeedProbe, FeedValidator, FeedVerdict
+from app.core.resolver import resolve_host_addresses, select_public_address
 
 logger = get_logger(__name__)
 
@@ -64,6 +67,10 @@ class HttpFeedValidator(FeedValidator):
             # A redirect tried to reach a forbidden target. Refuse the whole
             # probe instead of completing the hop.
             return FeedProbe(url=normalized, verdict=FeedVerdict.BLOCKED, reason=str(exc))
+        except socket.gaierror as exc:
+            # The name does not resolve, so the host cannot be reached. That is
+            # an unreachable feed, not a forbidden target.
+            return FeedProbe(url=normalized, verdict=FeedVerdict.HTTP_ERROR, reason=f"name resolution failed: {exc}")
         except httpx.TimeoutException:
             return FeedProbe(url=normalized, verdict=FeedVerdict.TIMEOUT, reason="no response in time")
         except httpx.HTTPError as exc:
@@ -116,7 +123,9 @@ class HttpFeedValidator(FeedValidator):
 
         httpx follows redirects transparently, which would let a public URL
         redirect into a private address. Redirects are therefore followed
-        manually so each hop passes :func:`validate_feed_url` first.
+        manually so each hop passes :func:`validate_feed_url` first, and each
+        hop is resolved and pinned so the socket reaches the address that was
+        actually validated.
 
         Returns the status code, the decoded body, and the effective URL. The
         effective URL matters because the reader stores *it* as the feed
@@ -132,7 +141,7 @@ class HttpFeedValidator(FeedValidator):
         ) as client:
             current = url
             for _hop in range(self.max_redirects + 1):
-                response = await client.get(current)
+                response = await client.send(await self._build_request(client, current))
                 if not response.is_redirect:
                     return response.status_code, _read_capped(response, self.max_bytes), current
 
@@ -145,6 +154,44 @@ class HttpFeedValidator(FeedValidator):
                 f"more than {self.max_redirects} redirects",
                 request=httpx.Request("GET", current),
             )
+
+    async def _build_request(self, client: httpx.AsyncClient, url: str) -> httpx.Request:
+        """Resolve the target and pin the connection to the validated address.
+
+        The request keeps the original hostname in the ``Host`` header and in
+        the TLS server name, so certificate verification and virtual hosting
+        still work, while the socket only ever reaches an address that passed
+        the public-address policy.
+        """
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+
+        addresses = await resolve_host_addresses(host, port)
+        address = select_public_address(host, addresses)
+
+        return client.build_request(
+            "GET",
+            _pinned_url(url, address),
+            headers={"Host": _authority(parts)},
+            extensions={"sni_hostname": host},
+        )
+
+
+def _authority(parts: SplitResult) -> str:
+    """Return the authority as the caller wrote it, without the credentials."""
+    host = parts.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{host}:{parts.port}" if parts.port else host
+
+
+def _pinned_url(url: str, address: str) -> str:
+    """Return the same URL pointing at the validated address."""
+    parts = urlsplit(url)
+    host = f"[{address}]" if ":" in address else address
+    netloc = f"{host}:{parts.port}" if parts.port else host
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 def _read_capped(response: httpx.Response, max_bytes: int) -> str:

@@ -1,8 +1,11 @@
 """Feed validator: every verdict is distinguishable and correctly attributed."""
 
+import socket
+
 import httpx
 import pytest
 
+from app.adapters.http import feed_validator
 from app.adapters.http.feed_validator import HttpFeedValidator
 from app.core.ports.feed_validator import FeedVerdict
 
@@ -20,6 +23,22 @@ RSS_WITHOUT_ITEMS = """<?xml version="1.0"?>
 <rss version="2.0"><channel><title>Empty</title></channel></rss>"""
 
 HTML_PAGE = "<!DOCTYPE html><html><body><h1>Not a feed</h1></body></html>"
+
+PUBLIC_ADDRESS = "93.184.216.34"
+PRIVATE_ADDRESS = "10.0.0.5"
+
+
+async def _resolve(host: str, port: int = 443) -> list[str]:
+    """Resolve test hosts to deterministic addresses."""
+    if host.startswith("internal"):
+        return [PRIVATE_ADDRESS]
+    return [PUBLIC_ADDRESS]
+
+
+@pytest.fixture(autouse=True)
+def _resolved_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every candidate to a deterministic public address."""
+    monkeypatch.setattr(feed_validator, "resolve_host_addresses", _resolve)
 
 
 @pytest.fixture
@@ -197,7 +216,7 @@ async def test_public_redirect_is_followed(validator: HttpFeedValidator, monkeyp
     """A legitimate redirect to another public host still resolves."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "old.test":
+        if request.headers.get("Host") == "old.test":
             return httpx.Response(301, headers={"location": "https://new.test/feed"})
         return httpx.Response(200, text=RSS_WITH_ITEMS)
 
@@ -207,13 +226,83 @@ async def test_public_redirect_is_followed(validator: HttpFeedValidator, monkeyp
     assert probe.verdict is FeedVerdict.ALIVE
 
 
+async def test_host_resolving_to_a_private_address_is_blocked(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A public name pointing at the internal network is refused before any request."""
+    called = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://internal.test/feed")
+
+    assert probe.verdict is FeedVerdict.BLOCKED
+    assert called is False
+    assert PRIVATE_ADDRESS in probe.reason
+
+
+async def test_redirect_to_a_private_address_is_blocked(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every hop is resolved, so a redirect cannot reach the internal network."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("Host") == "example.test":
+            return httpx.Response(302, headers={"location": "https://internal.test/latest"})
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://example.test/feed")
+
+    assert probe.verdict is FeedVerdict.BLOCKED
+    assert PRIVATE_ADDRESS in probe.reason
+
+
+async def test_request_is_pinned_to_the_validated_address(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The socket reaches the validated address while the name is preserved."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://example.test/feed")
+
+    assert probe.verdict is FeedVerdict.ALIVE
+    assert seen[0].url.host == PUBLIC_ADDRESS
+    assert seen[0].headers["Host"] == "example.test"
+    assert seen[0].extensions["sni_hostname"] == "example.test"
+
+
+async def test_unresolvable_host_is_an_http_error(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A name that does not resolve is an unreachable feed, not a blocked one."""
+
+    async def failing(host: str, port: int = 443) -> list[str]:
+        raise socket.gaierror("Name or service not known")
+
+    monkeypatch.setattr(feed_validator, "resolve_host_addresses", failing)
+    probe = await validator.validate("https://gone.test/feed")
+
+    assert probe.verdict is FeedVerdict.HTTP_ERROR
+    assert "name resolution failed" in probe.reason
+
+
 async def test_probe_reports_the_effective_url_after_a_redirect(
     validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The reader stores the effective URL, so duplicate checks need it."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "old.test":
+        if request.headers.get("Host") == "old.test":
             return httpx.Response(301, headers={"location": "https://new.test/feed"})
         return httpx.Response(200, text=RSS_WITH_ITEMS)
 

@@ -184,7 +184,11 @@ deprecated.
 **SSRF is refused before the network.** Only `http` and `https` are accepted;
 credentials in the authority, loopback, private, link-local, reserved, and
 metadata targets are rejected, and every redirect hop is re-validated because
-httpx would otherwise follow one into a private address. This holds even with a
+httpx would otherwise follow one into a private address. The hostname is also
+resolved before the connection, and every resolved address must be globally
+routable. The request then pins the validated address while keeping the
+original name in the `Host` header and in the TLS server name, so a second
+lookup cannot move the socket to another target. This holds even with a
 single user and no public exposure.
 
 ## Git conventions

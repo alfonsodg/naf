@@ -22,6 +22,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - SSRF protection for every candidate URL: `http`/`https` only, no credentials
   in the authority, and loopback, private, link-local, reserved, and metadata
   targets refused, including on each redirect hop.
+- Host resolution for every candidate feed: the name is resolved before the
+  connection and every resolved address must be globally routable, and the
+  request pins the validated address while keeping the original name in the
+  `Host` header and the TLS server name.
 - OPML parsing that preserves folder nesting as categories and reports a feed
   appearing under several tags instead of keeping only the first, which is what
   Miniflux's own importer does.

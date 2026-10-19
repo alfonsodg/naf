@@ -55,9 +55,8 @@ def validate_feed_url(url: str) -> str:
 
     The rules are deliberately strict: only ``http``/``https``, a mandatory
     host, no credentials in the authority, and no loopback, link-local, or
-    metadata target. Resolution is not performed, so a public hostname that
-    resolves internally is caught later, when the redirect target of every hop
-    is re-checked by the validator.
+    metadata target. They read the name only, so the name is resolved
+    separately by :mod:`app.core.resolver` before any connection is made.
     """
     candidate = url.strip()
     if not candidate:
