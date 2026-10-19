@@ -120,6 +120,11 @@ cover "this week" or "since the last one".
 Every entry carries the attachments and the tags the feed provided, so an
 audio enclosure is never lost on the way to a report.
 
+`POST /api/v1/collect` runs one ingestion pass with per-feed failure
+isolation, and every pass is recorded in the NAF database as an ingestion run.
+The response names the run, so a feed that starts failing leaves a trace of
+which feed failed, when, and with what error.
+
 `GET /api/v1/feeds` and `GET /api/v1/feeds/health` return the same projected
 shape: the identifier, the title, the feed and site addresses, the category,
 the last check, the parsing errors, and the paused state. The reader's own

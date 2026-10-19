@@ -22,6 +22,25 @@ OPML = "<?xml version='1.0'?><opml version='2.0'><body/></opml>"
 def stub_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace reader calls with deterministic data for every test."""
 
+    class _FakeRuns:
+        """Run recorder double that keeps the passes in memory."""
+
+        def __init__(self) -> None:
+            self.runs: list[dict[str, Any]] = []
+
+        def start(self, adapter_name: str) -> int:
+            """Open a run and return its identifier."""
+            self.runs.append({"run_id": len(self.runs) + 1, "adapter": adapter_name, "status": "running"})
+            return len(self.runs)
+
+        def finish(self, run_id: int, status: str, entries_count: int, errors: list[dict[str, Any]]) -> None:
+            """Close a run with its result."""
+            self.runs[-1].update({"status": status, "entries": entries_count, "errors": errors})
+
+    runs = _FakeRuns()
+
+    monkeypatch.setattr(feeds, "IngestionRunStore", lambda session: runs)
+
     async def list_feeds(self: Any) -> list[dict[str, Any]]:
         return [
             {
@@ -236,6 +255,14 @@ def test_collect_runs_one_pass() -> None:
     assert response.status_code == 200
     body = response.json()["data"]
     assert set(body) >= {"started_at", "feeds", "total_entries", "errors"}
+
+
+def test_collect_reports_the_ingestion_run() -> None:
+    """The pass names the run that records it."""
+    response = client.post("/api/v1/collect", params={"limit": 10})
+
+    body = response.json()["data"]
+    assert body["ingestion_run_id"] == 1
 
 
 def test_reader_failure_returns_502_for_every_endpoint() -> None:

@@ -50,6 +50,22 @@ class StubReader:
         raise NotImplementedError
 
 
+class StubRuns:
+    """Run recorder double keeping the passes in memory."""
+
+    def __init__(self) -> None:
+        self.runs: list[dict[str, Any]] = []
+
+    def start(self, adapter_name: str) -> int:
+        """Open a run and return its identifier."""
+        self.runs.append({"run_id": len(self.runs) + 1, "adapter": adapter_name, "status": "running"})
+        return len(self.runs)
+
+    def finish(self, run_id: int, status: str, entries_count: int, errors: list[dict[str, Any]]) -> None:
+        """Close a run with its result."""
+        self.runs[-1].update({"status": status, "entries": entries_count, "errors": errors})
+
+
 def _feed(feed_id: int, title: str) -> dict[str, Any]:
     """Build a feed descriptor."""
     return {
@@ -151,6 +167,54 @@ async def test_collect_counts_entries_per_feed() -> None:
     assert result["total_entries"] == 2
     assert result["errors"] == []
     assert {feed["feed_id"]: feed["status"] for feed in result["feeds"]} == {1: "ok", 2: "ok"}
+
+
+async def test_the_pass_is_recorded_as_a_run() -> None:
+    """Every pass leaves a run with its counts and its state."""
+    feeds = [_feed(1, "Alpha")]
+    reader = StubReader(feeds, {1: [_entry(10, feeds[0], "2026-10-18T09:00:00Z")]})
+    runs = StubRuns()
+
+    result = await Collector(reader, runs).collect(limit=10)
+
+    assert result["ingestion_run_id"] == 1
+    assert runs.runs[0]["adapter"] == "miniflux"
+    assert runs.runs[0]["status"] == "success"
+    assert runs.runs[0]["entries"] == 1
+
+
+async def test_a_failing_feed_marks_the_run_as_failed() -> None:
+    """A pass with a broken feed is recorded as failed, with the error."""
+    feeds = [_feed(1, "Alpha")]
+    reader = StubReader(feeds, {1: RuntimeError("feed unavailable")})
+    runs = StubRuns()
+
+    await Collector(reader, runs).collect(limit=10)
+
+    assert runs.runs[0]["status"] == "failed"
+    assert runs.runs[0]["errors"][0]["feed_id"] == 1
+
+
+async def test_a_pass_survives_a_broken_recorder() -> None:
+    """The run is a record of the pass, never the pass itself."""
+    feeds = [_feed(1, "Alpha")]
+    reader = StubReader(feeds, {1: [_entry(10, feeds[0], "2026-10-18T09:00:00Z")]})
+
+    class BrokenRuns:
+        """Recorder that always fails."""
+
+        def start(self, adapter_name: str) -> int:
+            """Fail to open the run."""
+            raise RuntimeError("storage is down")
+
+        def finish(self, run_id: int, status: str, entries_count: int, errors: list[dict[str, Any]]) -> None:
+            """Fail to close the run."""
+            raise RuntimeError("storage is down")
+
+    result = await Collector(reader, BrokenRuns()).collect(limit=10)
+
+    assert result["total_entries"] == 1
+    assert result["ingestion_run_id"] is None
 
 
 async def test_one_failing_feed_does_not_block_others() -> None:

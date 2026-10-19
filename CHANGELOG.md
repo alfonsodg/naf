@@ -64,6 +64,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   credentials of an authenticated feed, and its icon never reach the API.
 - Ingestion collector with per-feed failure isolation and preserved
   provenance.
+- Every ingestion pass is recorded in the NAF database as an ingestion run:
+  when it started and finished, whether it succeeded or a feed failed, the
+  entry count, and the per-feed errors. The run identifier is returned by
+  `POST /collect` and carried in the structured logs.
 - README/entry endpoints for health, feeds, feed health, entries, read status,
   OPML import/export, and one ingestion pass.
 - NAF-owned schema: digests, digest stories, entities, ingestion runs, and

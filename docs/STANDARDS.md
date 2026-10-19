@@ -167,6 +167,13 @@ expose the fields documented in `README.md`, never the reader's own internals
 such as its scraping rules, the credentials of an authenticated feed, or its
 icon.
 
+Every ingestion pass is recorded in `ingestion_runs`: when it started, when it
+finished, whether it succeeded or a feed failed, how many entries it saw, and
+which feeds failed with which error. The run identifier is returned by
+`POST /collect` and carried in the structured logs. A run is a record of the
+pass, never a precondition for it: a storage problem is logged and the pass
+continues.
+
 ## Feed intake and validation
 
 A feed URL arriving from a pasted list, an OPML export, or a form field is

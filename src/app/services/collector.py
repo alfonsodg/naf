@@ -5,6 +5,7 @@ from typing import Any
 
 from app.core.logging import get_logger
 from app.core.ports.feed_reader import FeedReader
+from app.services.ingestion_runs import RunRecorder
 
 logger = get_logger(__name__)
 
@@ -12,16 +13,19 @@ logger = get_logger(__name__)
 class Collector:
     """Collect entries per feed and report per-feed health."""
 
-    def __init__(self, feed_reader: FeedReader) -> None:
+    def __init__(self, feed_reader: FeedReader, runs: RunRecorder | None = None) -> None:
         """Bind the collector to a reader implementation."""
         self.feed_reader = feed_reader
+        self.runs = runs
 
     async def collect(self, limit: int = 100, since: datetime | None = None) -> dict[str, Any]:
         """Run one pass; a failing feed must not stop the remaining ones."""
         started = datetime.now(UTC)
+        run_id = self._start_run()
         feeds = await self.feed_reader.list_feeds()
         result: dict[str, Any] = {
             "started_at": started.isoformat(),
+            "ingestion_run_id": run_id,
             "feeds": [],
             "total_entries": 0,
             "errors": [],
@@ -65,11 +69,39 @@ class Collector:
             result["total_entries"] += len(entries)
 
         result["finished_at"] = datetime.now(UTC).isoformat()
+        self._finish_run(run_id, result)
         logger.info(
             "collection finished",
-            extra={"count": result["total_entries"], "feeds": len(result["feeds"])},
+            extra={
+                "count": result["total_entries"],
+                "feeds": len(result["feeds"]),
+                "ingestion_run_id": run_id,
+            },
         )
         return result
+
+    def _start_run(self) -> int | None:
+        """Open the ingestion run that records this pass."""
+        if self.runs is None:
+            return None
+        try:
+            return self.runs.start("miniflux")
+        except Exception as exc:
+            # The run is a record of the pass, not the pass itself. A storage
+            # problem must never cost the collection.
+            logger.warning("could not open the ingestion run", extra={"error": type(exc).__name__})
+            return None
+
+    def _finish_run(self, run_id: int | None, result: dict[str, Any]) -> None:
+        """Close the ingestion run with the result of the pass."""
+        if self.runs is None or run_id is None:
+            return
+        errors = result.get("errors", [])
+        status = "failed" if errors else "success"
+        try:
+            self.runs.finish(run_id, status, int(result.get("total_entries", 0)), errors)
+        except Exception as exc:
+            logger.warning("could not close the ingestion run", extra={"error": type(exc).__name__})
 
     async def health_report(self) -> list[dict[str, Any]]:
         """Summarize freshness and parsing status for every feed."""

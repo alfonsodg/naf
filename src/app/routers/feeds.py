@@ -16,6 +16,7 @@ from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
 from app.services.collector import Collector, normalize_entry, normalize_feed
 from app.services.feed_folders import FeedFolderStore
 from app.services.feed_intake import CandidateFeed, FeedIntake, parse_opml, parse_url_list
+from app.services.ingestion_runs import IngestionRunStore
 
 router = APIRouter()
 
@@ -29,9 +30,9 @@ def _client() -> MinifluxClient:
     return MinifluxClient()
 
 
-def _collector() -> Collector:
-    """Build a collector bound to the reader adapter."""
-    return Collector(_client())
+def _collector(session: Session) -> Collector:
+    """Build a collector bound to the reader adapter and the run recorder."""
+    return Collector(_client(), IngestionRunStore(session))
 
 
 def _intake(session: Session) -> FeedIntake:
@@ -69,10 +70,10 @@ async def list_feeds() -> list[dict[str, Any]]:
 
 
 @router.get("/feeds/health")
-async def feeds_health() -> list[dict[str, Any]]:
+async def feeds_health(session: SessionDep) -> list[dict[str, Any]]:
     """Report per-feed freshness, parsing errors and disabled state."""
     try:
-        return await _collector().health_report()
+        return await _collector(session).health_report()
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
 
@@ -286,9 +287,9 @@ async def import_opml(opml: Annotated[str, Body(media_type="text/xml")]) -> dict
 
 
 @router.post("/collect")
-async def collect(limit: LimitQuery = 100) -> dict[str, Any]:
+async def collect(session: SessionDep, limit: LimitQuery = 100) -> dict[str, Any]:
     """Run one ingestion pass with per-feed failure isolation."""
     try:
-        return {"data": await _collector().collect(limit=limit)}
+        return {"data": await _collector(session).collect(limit=limit)}
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
