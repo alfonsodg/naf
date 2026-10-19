@@ -50,10 +50,6 @@ class FeedReader(ABC):
         """Set the read status for one or more entries."""
 
     @abstractmethod
-    async def mark_entry_read(self, entry_id: int) -> bool:
-        """Mark one entry as read."""
-
-    @abstractmethod
     async def export_opml(self) -> str:
         """Export subscriptions as an OPML document."""
 

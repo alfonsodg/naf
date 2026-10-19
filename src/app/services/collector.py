@@ -71,11 +71,6 @@ class Collector:
         )
         return result
 
-    async def get_entries(self, **kwargs: Any) -> list[dict[str, Any]]:
-        """Return normalized entries for the given filters."""
-        entries = await self.feed_reader.get_entries(**kwargs)
-        return [normalize_entry(entry) for entry in entries]
-
     async def health_report(self) -> list[dict[str, Any]]:
         """Summarize freshness and parsing status for every feed."""
         feeds = await self.feed_reader.list_feeds()

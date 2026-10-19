@@ -44,3 +44,14 @@ def test_layering_has_no_backwards_imports() -> None:
         source = open(namespace.__file__, encoding="utf-8").read()  # noqa: SIM115
         for target in forbidden:
             assert f"import {target}" not in source
+
+
+def test_helpers_without_a_consumer_stay_removed() -> None:
+    """A public helper without a caller is not reintroduced."""
+    from app.core import feed_urls
+    from app.core.ports import feed_reader
+    from app.services import collector
+
+    assert not hasattr(feed_urls, "is_feed_document")
+    assert not hasattr(feed_reader.FeedReader, "mark_entry_read")
+    assert not hasattr(collector.Collector, "get_entries")

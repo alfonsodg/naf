@@ -37,10 +37,6 @@ class StubReader:
         """Unused by the collector."""
         raise NotImplementedError
 
-    async def mark_entry_read(self, entry_id: int) -> bool:
-        """Unused by the collector."""
-        raise NotImplementedError
-
     async def export_opml(self) -> str:
         """Unused by the collector."""
         raise NotImplementedError

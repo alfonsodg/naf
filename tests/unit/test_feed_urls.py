@@ -6,7 +6,7 @@ file carries no hardcoded IP constants.
 
 import pytest
 
-from app.core.feed_urls import FeedURLError, is_feed_document, validate_feed_url
+from app.core.feed_urls import FeedURLError, validate_feed_url
 
 
 def _ipv4(*octets: int) -> str:
@@ -92,19 +92,3 @@ def test_public_ip_literal_is_allowed() -> None:
     """A globally routable IP literal is not an internal target."""
     url = f"https://{PUBLIC_DNS}/feed"
     assert validate_feed_url(url) == url
-
-
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("https://example.test/rss.xml", True),
-        ("https://example.test/feed", True),
-        ("https://example.test/atom", True),
-        ("https://example.test/blog/feed/", True),
-        ("https://example.test/index.rss", True),
-        ("https://example.test/about", False),
-    ],
-)
-def test_feed_document_heuristic(url: str, expected: bool) -> None:
-    """The heuristic only informs a discovery decision; it never rejects input."""
-    assert is_feed_document(url) is expected

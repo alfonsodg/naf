@@ -131,10 +131,6 @@ class MinifluxClient(FeedReader):
         )
         return response.status_code == httpx.codes.NO_CONTENT
 
-    async def mark_entry_read(self, entry_id: int) -> bool:
-        """Mark a single entry as read."""
-        return await self.update_entries_status([entry_id], "read")
-
     async def export_opml(self) -> str:
         """Export all subscriptions as OPML."""
         response = await self._request("GET", "/v1/export")
