@@ -54,6 +54,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   dropped.
 - Readiness probe (`GET /api/v1/health/ready`) that verifies PostgreSQL and the
   Miniflux API and reports each dependency separately.
+- The development compose stack brings up the reader too: `miniflux` and
+  `miniflux-db`, with their own named volumes, so the environment that
+  exercises the whole product comes up on its own.
 - Structured JSON logging with correlation identifiers (`feed_id`,
   `ingestion_run_id`, `digest_id`) and no secret values.
 - Typed configuration with fail-fast required values and the `NAF_`

@@ -43,7 +43,8 @@ reverse proxy resolve them by DNS name; renaming breaks the deployment.
 
 - `naf` exposes `/health` for liveness and `/api/v1/*` for the API.
 - Miniflux is reached over HTTP using `NAF_MINIFLUX_URL` with an
-  `X-Auth-Token` header. Communication is API-only.
+  `X-Auth-Token` header. Communication is API-only. In development the URL
+  points at the `miniflux` service of the compose stack.
 - Neither database is exposed outside the internal network.
 
 ## Persistent storage
@@ -52,7 +53,8 @@ reverse proxy resolve them by DNS name; renaming breaks the deployment.
 | --- | --- | --- | --- |
 | `naf-db` | `/var/lib/postgresql/data` | NAF PostgreSQL data | Yes |
 | `naf-audio` | `/data/audio` | Generated audio assets | Yes |
-| Miniflux volume | Miniflux-defined | Reader state | Yes, owned by Miniflux |
+| `miniflux-db` | `/var/lib/postgresql/data` | Reader PostgreSQL data | Yes, owned by the reader |
+| `miniflux-data` | `/var/lib/miniflux` | Reader state | Yes, owned by the reader |
 
 Container-internal storage is prohibited: every durable path is a named volume
 or an explicit host path. Existing volumes must never be unmounted, reformatted,
