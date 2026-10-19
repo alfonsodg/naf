@@ -67,7 +67,7 @@ services:
     volumes:
       - naf-audio:/data/audio
     ports:
-      - "${NAF_PORT:?NAF_PORT is required}:8000"
+      - "127.0.0.1:${NAF_PORT:?NAF_PORT is required}:8000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 15s
