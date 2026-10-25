@@ -53,7 +53,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   per-host probe limit beside the global one, a bounded retry with backoff for
   a host that answers `429`, and a batch limit in size and in time. The
   candidates that do not fit are reported as `not_processed` instead of being
-  dropped.
+  dropped. The time bound is a wall-clock bound: the chunk is sized from the
+  per-host limit and the retry count, so a same-host batch cannot outlast it.
 - Readiness probe (`GET /api/v1/health/ready`) that verifies PostgreSQL and the
   Miniflux API and reports each dependency separately.
 - The development compose stack brings up the reader too: `miniflux` and

@@ -231,6 +231,14 @@ retries is bounded. The batch is bounded in size and in time as well, so a
 large import cannot outlast the reverse proxy and leave the caller without a
 report.
 
+The time bound is a wall-clock bound, not a per-request timeout. The per-host
+limit turns a chunk into several rounds, and a probe may spend its timeout once
+per attempt, so a chunk is sized as `per_host_concurrency x (1 + retries)` and
+each probe gets the remaining budget divided by the same attempt count. The
+worst case of one chunk is therefore the remaining budget; the call can only
+overshoot it by one probe round. A test measures the elapsed time and fails if
+the call exceeds the budget plus one timeout.
+
 **A response is capped while it is read.** The probe streams the body and
 stops as soon as `NAF_FEED_INTAKE_MAX_BYTES` is exceeded, so a server that
 sends an endless document is refused instead of being buffered. The cap is

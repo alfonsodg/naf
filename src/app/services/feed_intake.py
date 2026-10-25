@@ -24,7 +24,7 @@ from app.core.ports.feed_reader import FeedReader
 from app.core.ports.feed_validator import FeedProbe, FeedValidator, FeedVerdict
 from app.services.feed_documents import CandidateFeed
 from app.services.feed_folders import FolderRecorder
-from app.services.feed_intake_report import IntakeRow, chunks, count_verdicts, not_processed_rows, row_payload
+from app.services.feed_intake_report import IntakeRow, count_verdicts, not_processed_rows, row_payload
 
 logger = get_logger(__name__)
 
@@ -56,15 +56,19 @@ class FeedIntake:
         categories = await self._category_index()
 
         rows: list[IntakeRow] = []
-        for chunk in chunks(accepted, settings.feed_validation_concurrency):
-            if time.monotonic() >= deadline:
+        index = 0
+        while index < len(accepted):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 break
+            chunk = accepted[index : index + _chunk_size()]
             probes = await self.validator.validate_many(
                 [candidate.url for candidate in chunk],
-                timeout=max(0.1, deadline - time.monotonic()),
+                timeout=max(0.1, min(settings.feed_validation_timeout, remaining / _attempts())),
             )
             for candidate, probe in zip(chunk, probes, strict=True):
                 rows.append(await self._process(candidate, probe, existing, categories))
+            index += len(chunk)
 
         processed = len(rows)
         rows.extend(not_processed_rows(accepted[processed:] + deferred))
@@ -246,3 +250,19 @@ class FeedIntake:
             for category in categories
             if category.get("id") is not None
         }
+
+
+def _attempts() -> int:
+    """Return how many requests one probe may make, including its retries."""
+    return 1 + settings.feed_validation_max_retries
+
+
+def _chunk_size() -> int:
+    """Return how many candidates one round of the budget may probe.
+
+    One probe may spend its timeout once per attempt, and the per-host limit
+    turns a chunk into ceil(size / per_host) rounds. Sizing the chunk as
+    ``per_host x attempts`` keeps that product at or under the remaining
+    budget, whatever the shape of the input.
+    """
+    return max(1, settings.feed_validation_per_host_concurrency * _attempts())
