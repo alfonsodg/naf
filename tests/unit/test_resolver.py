@@ -79,3 +79,12 @@ def _fixed(addresses: list[str]) -> object:
         return list(addresses)
 
     return _resolve_addresses
+
+
+@pytest.mark.parametrize("address", ["::ffff:127.0.0.1", "::ffff:10.0.0.5", "::ffff:169.254.169.254"])
+def test_a_mapped_ipv4_address_is_refused(address: str) -> None:
+    """An IPv4-mapped IPv6 address is refused for the address it wraps."""
+    with pytest.raises(FeedURLError) as excinfo:
+        select_public_address("host.test", [address])
+
+    assert address in str(excinfo.value)

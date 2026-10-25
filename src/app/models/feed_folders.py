@@ -1,10 +1,15 @@
 """NAF-owned record of the folders a feed was found under."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
 
 from app.db.base import Base
+
+
+def _now() -> datetime:
+    """Return the current UTC time in the naive form the columns use."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class FeedFolder(Base):
@@ -20,4 +25,4 @@ class FeedFolder(Base):
     id = Column(Integer, primary_key=True, index=True)
     feed_url = Column(String(500), nullable=False, index=True)
     folder = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_now)

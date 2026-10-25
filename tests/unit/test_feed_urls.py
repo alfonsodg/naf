@@ -92,3 +92,10 @@ def test_public_ip_literal_is_allowed() -> None:
     """A globally routable IP literal is not an internal target."""
     url = f"https://{PUBLIC_DNS}/feed"
     assert validate_feed_url(url) == url
+
+
+@pytest.mark.parametrize("url", ["https://[::ffff:127.0.0.1]/feed", "https://[::ffff:10.0.0.5]/feed"])
+def test_a_mapped_ipv4_literal_is_refused(url: str) -> None:
+    """An IPv4-mapped IPv6 literal is refused for the address it wraps."""
+    with pytest.raises(FeedURLError):
+        validate_feed_url(url)

@@ -300,3 +300,20 @@ async def test_a_document_under_the_limit_is_still_read(
 
     assert probe.verdict is FeedVerdict.ALIVE
     assert probe.item_count == 2
+
+
+def test_the_retry_delay_honours_retry_after(validator: HttpFeedValidator) -> None:
+    """A host that states a delay is believed."""
+    assert validator._retry_delay(httpx.Response(429, headers={"retry-after": "7"}), 0) == 7.0
+
+
+def test_the_retry_delay_is_clamped(validator: HttpFeedValidator) -> None:
+    """A host asking for a day must not hold the request open."""
+    assert validator._retry_delay(httpx.Response(429, headers={"retry-after": "86400"}), 0) == 30.0
+
+
+def test_the_retry_delay_grows_exponentially_without_a_header(validator: HttpFeedValidator) -> None:
+    """With no delay stated, each attempt waits twice as long as the last."""
+    delays = [validator._retry_delay(httpx.Response(429), attempt) for attempt in range(3)]
+
+    assert delays == [1.0, 2.0, 4.0]
