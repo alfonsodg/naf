@@ -62,7 +62,7 @@ services:
     environment:
       NAF_DATABASE_URL: postgresql://${NAF_DB_USER}:${NAF_DB_PASSWORD}@db:5432/${NAF_DB_NAME}
       NAF_MINIFLUX_URL: ${NAF_MINIFLUX_URL:-http://miniflux:8080}
-      NAF_MINIFLUX_API_KEY: ${NAF_MINIFLUX_API_KEY}
+      NAF_MINIFLUX_API_KEY: ${NAF_MINIFLUX_API_KEY:?NAF_MINIFLUX_API_KEY is required}
       NAF_AUDIO_STORAGE_PATH: /data/audio
     volumes:
       - naf-audio:/data/audio
