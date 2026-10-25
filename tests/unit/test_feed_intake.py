@@ -27,6 +27,7 @@ class StubReader:
         self.imported_opml: list[str] = []
         self.fail_create = False
         self.fail_import = False
+        self.fail_category = False
 
     async def list_feeds(self) -> list[dict[str, Any]]:
         return [{"id": index + 1, "feed_url": url} for index, url in enumerate(self.existing)]
@@ -35,6 +36,8 @@ class StubReader:
         return self.categories
 
     async def create_category(self, title: str) -> dict[str, Any]:
+        if self.fail_category:
+            raise MinifluxAPIError("reader refused the category")
         self.created_categories.append(title)
         category = {"id": 100 + len(self.created_categories), "title": title}
         self.categories.append(category)

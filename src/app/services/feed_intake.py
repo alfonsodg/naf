@@ -120,10 +120,22 @@ class FeedIntake:
         # a host that blocks one client but not the other can still be added,
         # and the reader import is the fallback that keeps the subscription
         # without fetching it.
-        if probe.verdict is FeedVerdict.THROTTLED:
+        if probe.verdict is not FeedVerdict.THROTTLED and probe.verdict is not FeedVerdict.ALIVE:
+            return row
+
+        # Only a candidate that will be written needs a category, and a category
+        # that cannot be resolved fails this candidate alone: the reader may be
+        # unavailable for the write without costing the rest of the report.
+        try:
             category_id, applied = await self._category_for(candidate, categories)
-            row.applied_category = applied
-            row.reported_categories = list(candidate.categories[1:])
+        except MinifluxAPIError as exc:
+            row.reason = f"the category could not be resolved: {exc}"
+            return row
+        row.applied_category = applied
+        row.reported_categories = list(candidate.categories[1:])
+        stored_url = probe.final_url or candidate.url
+
+        if probe.verdict is FeedVerdict.THROTTLED:
             try:
                 await self._create(candidate.url, category_id, disabled=True)
             except MinifluxAPIError as exc:
@@ -131,15 +143,9 @@ class FeedIntake:
             row.added = True
             row.disabled = True
             row.reason = "host refused an automated client; added disabled and unverified"
-            self._record_folders(candidate.url, row.reported_categories)
+            self._record_folders(stored_url, row.reported_categories)
             return row
 
-        if probe.verdict is not FeedVerdict.ALIVE:
-            return row
-
-        category_id, applied = await self._category_for(candidate, categories)
-        row.applied_category = applied
-        row.reported_categories = list(candidate.categories[1:])
         try:
             await self._create(candidate.url, category_id, disabled=False)
         except MinifluxAPIError as exc:
@@ -156,7 +162,7 @@ class FeedIntake:
             return row
 
         row.added = True
-        self._record_folders(candidate.url, row.reported_categories)
+        self._record_folders(stored_url, row.reported_categories)
         return row
 
     def _record_folders(self, feed_url: str, folders: list[str]) -> None:
