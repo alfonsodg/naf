@@ -231,6 +231,11 @@ retries is bounded. The batch is bounded in size and in time as well, so a
 large import cannot outlast the reverse proxy and leave the caller without a
 report.
 
+**A response is capped while it is read.** The probe streams the body and
+stops as soon as `NAF_FEED_INTAKE_MAX_BYTES` is exceeded, so a server that
+sends an endless document is refused instead of being buffered. The cap is
+applied to the bytes as they arrive, not to a body that was already read.
+
 **SSRF is refused before the network.** Only `http` and `https` are accepted;
 credentials in the authority, loopback, private, link-local, reserved, and
 metadata targets are rejected, and every redirect hop is re-validated because

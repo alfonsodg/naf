@@ -244,3 +244,59 @@ async def test_the_retries_are_bounded(validator: HttpFeedValidator, monkeypatch
 
     assert attempts == settings.feed_validation_max_retries + 1
     assert probe.verdict is FeedVerdict.THROTTLED
+
+
+class _TrackedChunks(httpx.AsyncByteStream):
+    """A body that counts how many chunks the reader actually pulled."""
+
+    def __init__(self, count: int, size: int) -> None:
+        self.count = count
+        self.size = size
+        self.consumed = 0
+
+    async def __aiter__(self) -> object:
+        for _ in range(self.count):
+            self.consumed += 1
+            yield b"x" * self.size
+
+
+async def test_the_body_is_capped_while_it_is_read() -> None:
+    """A body over the limit stops being read, so it never lands in memory."""
+    body = _TrackedChunks(count=100, size=1024)
+    response = httpx.Response(200, stream=body)
+
+    with pytest.raises(feed_validator.ResponseTooLargeError):
+        await feed_validator.read_capped(response, max_bytes=4096)
+
+    assert body.consumed <= 5, "the reader pulled the whole body"
+
+
+async def test_a_document_over_the_limit_is_reported(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A feed larger than the configured limit is refused with a reason."""
+    validator.max_bytes = 64
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<rss><channel>" + "x" * 500 + "</channel></rss>")
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://example.test/feed")
+
+    assert probe.verdict is FeedVerdict.HTTP_ERROR
+    assert "limit" in probe.reason
+
+
+async def test_a_document_under_the_limit_is_still_read(
+    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cap never changes the verdict for a normal feed."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=RSS_WITH_ITEMS)
+
+    _patch_transport(monkeypatch, handler)
+    probe = await validator.validate("https://example.test/feed")
+
+    assert probe.verdict is FeedVerdict.ALIVE
+    assert probe.item_count == 2

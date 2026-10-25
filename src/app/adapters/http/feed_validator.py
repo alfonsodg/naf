@@ -31,6 +31,11 @@ _THROTTLE_CODES = frozenset({401, 403, 405, 406, 409, 418, 429})
 
 _USER_AGENT = "naf-feed-validator/0.1 (+https://github.com/alfonsodg/naf)"
 
+
+class ResponseTooLargeError(Exception):
+    """A feed document is larger than the configured limit."""
+
+
 # Longest wait honoured when a host asks the client to come back later. A
 # server asking for hours must not hold the intake request open.
 _MAX_RETRY_DELAY = 30.0
@@ -107,6 +112,10 @@ class HttpFeedValidator(FeedValidator):
             # The name does not resolve, so the host cannot be reached. That is
             # an unreachable feed, not a forbidden target.
             return FeedProbe(url=normalized, verdict=FeedVerdict.HTTP_ERROR, reason=f"name resolution failed: {exc}")
+        except ResponseTooLargeError as exc:
+            # The document never finished arriving within the size limit. It is
+            # refused rather than buffered, so a huge body cannot cost memory.
+            return FeedProbe(url=normalized, verdict=FeedVerdict.HTTP_ERROR, reason=str(exc))
         except httpx.TimeoutException:
             return FeedProbe(url=normalized, verdict=FeedVerdict.TIMEOUT, reason="no response in time")
         except httpx.HTTPError as exc:
@@ -178,13 +187,16 @@ class HttpFeedValidator(FeedValidator):
             current = url
             for _hop in range(self.max_redirects + 1):
                 response = await self._send_with_backoff(client, current, timeout)
-                if not response.is_redirect:
-                    return response.status_code, _read_capped(response, self.max_bytes), current
+                try:
+                    if not response.is_redirect:
+                        return response.status_code, await read_capped(response, self.max_bytes), current
 
-                location = response.headers.get("location", "")
-                if not location:
-                    return response.status_code, "", current
-                current = validate_feed_url(str(httpx.URL(current).join(location)))
+                    location = response.headers.get("location", "")
+                    if not location:
+                        return response.status_code, "", current
+                    current = validate_feed_url(str(httpx.URL(current).join(location)))
+                finally:
+                    await response.aclose()
 
             raise httpx.TooManyRedirects(
                 f"more than {self.max_redirects} redirects",
@@ -195,13 +207,16 @@ class HttpFeedValidator(FeedValidator):
         """Send the request, waiting out a refusal that asks the client to wait.
 
         A host that answers 429 is asking for a pause, not refusing the feed
-        forever, so the request is retried after the delay it asked for.
+        forever, so the request is retried after the delay it asked for. The
+        body is never read here, so a refused response is closed before the
+        next attempt.
         """
         attempt = 0
         while True:
-            response = await client.send(await self._build_request(client, url))
+            response = await client.send(await self._build_request(client, url), stream=True)
             if response.status_code != 429 or attempt >= self.max_retries:
                 return response
+            await response.aclose()
             await asyncio.sleep(min(self._retry_delay(response, attempt), timeout))
             attempt += 1
 
@@ -256,14 +271,23 @@ def _pinned_url(url: str, address: str) -> str:
     return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
-def _read_capped(response: httpx.Response, max_bytes: int) -> str:
-    """Read at most ``max_bytes`` of the body so a huge document cannot exhaust memory."""
-    raw = response.content[:max_bytes]
+async def read_capped(response: httpx.Response, max_bytes: int) -> str:
+    """Read a body up to ``max_bytes``, refusing anything larger.
+
+    The response must be streamed, so a server that sends an endless document
+    is stopped instead of being buffered in full.
+    """
+    collected = bytearray()
+    async for chunk in response.aiter_bytes():
+        collected.extend(chunk)
+        if len(collected) > max_bytes:
+            raise ResponseTooLargeError(f"the document exceeds the {max_bytes} byte limit")
+
     charset = response.encoding or "utf-8"
     try:
-        return raw.decode(charset, errors="replace")
+        return collected.decode(charset, errors="replace")
     except LookupError:
-        return raw.decode("utf-8", errors="replace")
+        return collected.decode("utf-8", errors="replace")
 
 
 def _looks_like_feed(body: str) -> bool:

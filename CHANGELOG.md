@@ -47,6 +47,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Settings `NAF_FEED_VALIDATION_TIMEOUT`, `NAF_FEED_VALIDATION_CONCURRENCY`,
   `NAF_FEED_VALIDATION_MAX_REDIRECTS`, and `NAF_FEED_INTAKE_MAX_BYTES` in every
   environment file.
+- A candidate response is streamed and capped while it is read, so a server
+  that sends an endless document is refused instead of being buffered in full.
 - Intake limits that keep a large import inside the request budget: a
   per-host probe limit beside the global one, a bounded retry with backoff for
   a host that answers `429`, and a batch limit in size and in time. The

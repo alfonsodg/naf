@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     feed_intake_max_bytes: int = Field(
         default=1_000_000,
         gt=0,
-        description="Largest accepted intake payload or feed response body",
+        description="Largest accepted intake payload; a larger feed response is refused while it is read",
     )
     feed_intake_max_batch: int = Field(
         default=50,
