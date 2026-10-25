@@ -162,10 +162,15 @@ from the reader and nothing else: the entries it carried and every NAF-owned
 record stay untouched, and no volume is ever removed with it.
 
 Every reader object is projected onto a shape this project defines before it
-leaves the API. The feed list, the feed health report, and the entry list each
-expose the fields documented in `README.md`, never the reader's own internals
-such as its scraping rules, the credentials of an authenticated feed, or its
-icon.
+leaves the API. The feed list, the feed health report, the single-feed write,
+and the entry list each expose the fields documented in `README.md`, never the
+reader's own internals such as its scraping rules, the credentials of an
+authenticated feed, or its icon.
+
+The OPML export is the exception, and it is deliberate: it is the reader's own
+document, built to be re-imported, and it carries the subscription settings the
+reader stores. It does not carry feed credentials, which the reader keeps
+outside the document and in separate fields.
 
 Every ingestion pass is recorded in `ingestion_runs`: when it started, when it
 finished, whether it succeeded or a feed failed, how many entries it saw, and

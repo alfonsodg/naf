@@ -118,7 +118,7 @@ async def update_feed(
         )
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
-    return {"data": updated}
+    return {"data": normalize_feed(updated)}
 
 
 @router.post("/feeds/{feed_id}/refresh")
@@ -266,7 +266,12 @@ async def update_entry(
 
 @router.get("/opml/export")
 async def export_opml() -> dict[str, Any]:
-    """Export subscriptions as OPML for portability."""
+    """Export subscriptions as OPML for portability.
+
+    The document is the reader's own export, not a projection: it carries the
+    subscription settings the reader stores. It does not carry feed credentials,
+    which the reader keeps outside the document.
+    """
     try:
         return {"data": {"opml": await _client().export_opml()}}
     except MinifluxAPIError as exc:
