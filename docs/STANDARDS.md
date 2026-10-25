@@ -172,7 +172,8 @@ finished, whether it succeeded or a feed failed, how many entries it saw, and
 which feeds failed with which error. The run identifier is returned by
 `POST /collect` and carried in the structured logs. A run is a record of the
 pass, never a precondition for it: a storage problem is logged and the pass
-continues.
+continues. The run is closed on every exit, including the paths that raise, so
+no row is ever left running by a pass that never finished.
 
 ## Feed intake and validation
 

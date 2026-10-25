@@ -269,3 +269,21 @@ async def test_collect_forwards_limit(limit: int) -> None:
     result = await Collector(reader).collect(limit=limit)
 
     assert result["total_entries"] == 0
+
+
+async def test_a_reader_failure_before_the_loop_closes_the_run() -> None:
+    """A run that could not list the feeds is recorded as failed, not left open."""
+
+    class BrokenReader(StubReader):
+        """Reader whose feed listing fails."""
+
+        async def list_feeds(self) -> list[dict[str, Any]]:
+            raise RuntimeError("reader is down")
+
+    runs = StubRuns()
+    collector = Collector(BrokenReader([], {}), runs)  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError):
+        await collector.collect(limit=10)
+
+    assert runs.runs[0]["status"] == "failed", "the run was left open"

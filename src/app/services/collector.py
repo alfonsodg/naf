@@ -22,7 +22,6 @@ class Collector:
         """Run one pass; a failing feed must not stop the remaining ones."""
         started = datetime.now(UTC)
         run_id = self._start_run()
-        feeds = await self.feed_reader.list_feeds()
         result: dict[str, Any] = {
             "started_at": started.isoformat(),
             "ingestion_run_id": run_id,
@@ -31,45 +30,15 @@ class Collector:
             "errors": [],
         }
 
-        for feed in feeds:
-            feed_id = feed["id"]
-            try:
-                entries = await self.feed_reader.get_entries(feed_id=feed_id, limit=limit)
-            except Exception as exc:
-                logger.warning(
-                    "feed collection failed",
-                    extra={"feed_id": feed_id, "error": type(exc).__name__},
-                )
-                result["errors"].append({"feed_id": feed_id, "error": str(exc)})
-                result["feeds"].append(
-                    {
-                        "feed_id": feed_id,
-                        "title": feed.get("title"),
-                        "entries": 0,
-                        "status": "error",
-                        "error": str(exc),
-                    }
-                )
-                continue
+        # The run is closed on every exit, including the ones that raise: a run
+        # left running is indistinguishable from a pass in flight.
+        try:
+            for feed in await self.feed_reader.list_feeds():
+                await self._collect_feed(feed, result, limit, since)
+            result["finished_at"] = datetime.now(UTC).isoformat()
+        finally:
+            self._finish_run(run_id, result)
 
-            if since is not None:
-                entries = [entry for entry in entries if _is_after(entry, since)]
-
-            result["feeds"].append(
-                {
-                    "feed_id": feed_id,
-                    "title": feed.get("title"),
-                    "url": feed.get("feed_url"),
-                    "entries": len(entries),
-                    "status": "ok",
-                    "checked_at": feed.get("checked_at"),
-                    "parsing_error_count": feed.get("parsing_error_count", 0),
-                }
-            )
-            result["total_entries"] += len(entries)
-
-        result["finished_at"] = datetime.now(UTC).isoformat()
-        self._finish_run(run_id, result)
         logger.info(
             "collection finished",
             extra={
@@ -79,6 +48,50 @@ class Collector:
             },
         )
         return result
+
+    async def _collect_feed(
+        self,
+        feed: dict[str, Any],
+        result: dict[str, Any],
+        limit: int,
+        since: datetime | None,
+    ) -> None:
+        """Collect one feed into the pass result, reporting its own failure."""
+        feed_id = feed["id"]
+        try:
+            entries = await self.feed_reader.get_entries(feed_id=feed_id, limit=limit)
+        except Exception as exc:
+            logger.warning(
+                "feed collection failed",
+                extra={"feed_id": feed_id, "error": type(exc).__name__},
+            )
+            result["errors"].append({"feed_id": feed_id, "error": str(exc)})
+            result["feeds"].append(
+                {
+                    "feed_id": feed_id,
+                    "title": feed.get("title"),
+                    "entries": 0,
+                    "status": "error",
+                    "error": str(exc),
+                }
+            )
+            return
+
+        if since is not None:
+            entries = [entry for entry in entries if _is_after(entry, since)]
+
+        result["feeds"].append(
+            {
+                "feed_id": feed_id,
+                "title": feed.get("title"),
+                "url": feed.get("feed_url"),
+                "entries": len(entries),
+                "status": "ok",
+                "checked_at": feed.get("checked_at"),
+                "parsing_error_count": feed.get("parsing_error_count", 0),
+            }
+        )
+        result["total_entries"] += len(entries)
 
     def _start_run(self) -> int | None:
         """Open the ingestion run that records this pass."""
@@ -97,7 +110,7 @@ class Collector:
         if self.runs is None or run_id is None:
             return
         errors = result.get("errors", [])
-        status = "failed" if errors else "success"
+        status = "failed" if errors or not result.get("finished_at") else "success"
         try:
             self.runs.finish(run_id, status, int(result.get("total_entries", 0)), errors)
         except Exception as exc:
