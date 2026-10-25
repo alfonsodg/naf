@@ -12,10 +12,8 @@ import pytest
 from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
 from app.core.ports.feed_validator import FeedProbe, FeedVerdict
-from app.services.feed_intake import (
-    CandidateFeed,
-    FeedIntake,
-)
+from app.services.feed_documents import CandidateFeed
+from app.services.feed_intake import FeedIntake
 
 
 class StubReader:

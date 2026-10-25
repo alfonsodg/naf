@@ -6,7 +6,7 @@ document is reduced to a list of candidates.
 
 import pytest
 
-from app.services.feed_intake import parse_opml, parse_url_list
+from app.services.feed_documents import parse_opml, parse_url_list
 
 FEEDLY_OPML = """<?xml version="1.0" encoding="UTF-8"?>
 <opml version="1.0">

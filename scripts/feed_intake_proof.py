@@ -21,7 +21,8 @@ import sys
 from app.adapters.http.feed_validator import HttpFeedValidator
 from app.adapters.miniflux.client import MinifluxClient
 from app.core.ports.feed_validator import FeedVerdict
-from app.services.feed_intake import CandidateFeed, FeedIntake
+from app.services.feed_documents import CandidateFeed
+from app.services.feed_intake import FeedIntake
 
 # A live feed, a feed that answers with no entries, and an unreachable host.
 # The unreachable one uses the reserved `.invalid` domain, so it can never

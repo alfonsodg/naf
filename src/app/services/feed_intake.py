@@ -2,7 +2,9 @@
 
 The pipeline never trusts its input. Every candidate is validated over HTTP
 first, and only a feed that answered with real entries is added. The report
-accounts for every input line, so nothing is dropped silently.
+accounts for every input line, so nothing is dropped silently. Reading the
+document itself lives in :mod:`app.services.feed_documents`, and the report in
+:mod:`app.services.feed_intake_report`.
 
 Why per-URL creation instead of an OPML import: Miniflux's ``POST /v1/feeds``
 fetches and parses the feed before inserting it, while ``POST /v1/import``
@@ -12,10 +14,7 @@ out, and it is not atomic.
 """
 
 import time
-from dataclasses import dataclass, field
 from typing import Any
-
-from defusedxml.ElementTree import ParseError, fromstring
 
 from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
@@ -23,115 +22,11 @@ from app.core.logging import get_logger
 from app.core.opml import build_feed_opml
 from app.core.ports.feed_reader import FeedReader
 from app.core.ports.feed_validator import FeedProbe, FeedValidator, FeedVerdict
+from app.services.feed_documents import CandidateFeed
 from app.services.feed_folders import FolderRecorder
+from app.services.feed_intake_report import IntakeRow, chunks, count_verdicts, not_processed_rows, row_payload
 
 logger = get_logger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class CandidateFeed:
-    """One feed URL proposed for addition, with the categories it appeared under."""
-
-    url: str
-    title: str = ""
-    categories: tuple[str, ...] = ()
-
-
-@dataclass(slots=True)
-class IntakeRow:
-    """One row of the intake report, one per input URL."""
-
-    url: str
-    verdict: str
-    status_code: int | None = None
-    item_count: int = 0
-    added: bool = False
-    disabled: bool = False
-    duplicate: bool = False
-    processed: bool = True
-    applied_category: str = ""
-    reported_categories: list[str] = field(default_factory=list)
-    reason: str = ""
-
-
-def parse_url_list(text: str) -> list[CandidateFeed]:
-    """Read one URL per line, ignoring blanks and ``#`` comments.
-
-    Duplicate lines collapse to one candidate; the reader is the owner of
-    per-URL uniqueness, so the same URL cannot be added twice.
-    """
-    seen: set[str] = set()
-    candidates: list[CandidateFeed] = []
-
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        for token in line.split():
-            if token.startswith("#"):
-                break
-            if token in seen:
-                continue
-            seen.add(token)
-            candidates.append(CandidateFeed(url=token))
-
-    return candidates
-
-
-def parse_opml(document: str) -> list[CandidateFeed]:
-    """Read an OPML document, preserving the outline nesting as categories.
-
-    Feedly writes a feed once per tag it belongs to. Miniflux's own importer keeps
-    only the first occurrence and drops the rest silently; here the same feed
-    becomes a single candidate carrying *all* of its categories, so the caller
-    can report the overlap instead of losing tags.
-    """
-    if len(document.encode("utf-8", errors="replace")) > settings.feed_intake_max_bytes:
-        raise ValueError("OPML document exceeds the configured size limit")
-
-    try:
-        root = fromstring(document)
-    except ParseError as exc:
-        raise ValueError(f"OPML document is not valid XML: {exc}") from exc
-
-    if root.tag.lower() != "opml":
-        raise ValueError("document is not an OPML file")
-
-    collected: dict[str, CandidateFeed] = {}
-
-    def walk(element: Any, trail: tuple[str, ...]) -> None:
-        for outline in element:
-            if outline.tag.lower() != "outline":
-                continue
-
-            title = (outline.get("text") or outline.get("title") or "").strip()
-            feed_url = (outline.get("xmlUrl") or "").strip()
-
-            if feed_url:
-                existing = collected.get(feed_url)
-                # The outermost outline carrying a feed URL is the category
-                # folder only when the feed itself is nested inside it.
-                categories = trail
-                if existing is None:
-                    collected[feed_url] = CandidateFeed(
-                        url=feed_url,
-                        title=title,
-                        categories=categories,
-                    )
-                elif categories and categories not in ((),):
-                    merged = tuple(dict.fromkeys((*existing.categories, *categories)))
-                    collected[feed_url] = CandidateFeed(
-                        url=existing.url,
-                        title=existing.title or title,
-                        categories=merged,
-                    )
-            else:
-                walk(outline, (*trail, title) if title else trail)
-
-    body = root.find("body")
-    walk(body if body is not None else root, ())
-
-    return list(collected.values())
 
 
 class FeedIntake:
@@ -161,7 +56,7 @@ class FeedIntake:
         categories = await self._category_index()
 
         rows: list[IntakeRow] = []
-        for chunk in _chunks(accepted, settings.feed_validation_concurrency):
+        for chunk in chunks(accepted, settings.feed_validation_concurrency):
             if time.monotonic() >= deadline:
                 break
             probes = await self.validator.validate_many(
@@ -172,7 +67,7 @@ class FeedIntake:
                 rows.append(await self._process(candidate, probe, existing, categories))
 
         processed = len(rows)
-        rows.extend(_not_processed_rows(accepted[processed:] + deferred))
+        rows.extend(not_processed_rows(accepted[processed:] + deferred))
 
         summary = {
             "received": len(candidates),
@@ -181,7 +76,7 @@ class FeedIntake:
             "added": sum(1 for row in rows if row.added),
             "already_present": sum(1 for row in rows if row.duplicate),
             "rejected": sum(1 for row in rows if row.processed and not row.added and not row.duplicate),
-            "by_verdict": _count_verdicts(rows),
+            "by_verdict": count_verdicts(rows),
         }
         logger.info(
             "feed intake finished",
@@ -191,7 +86,7 @@ class FeedIntake:
                 "not_processed": summary["not_processed"],
             },
         )
-        return {"summary": summary, "feeds": [_row_payload(row) for row in rows]}
+        return {"summary": summary, "feeds": [row_payload(row) for row in rows]}
 
     async def _process(
         self,
@@ -351,50 +246,3 @@ class FeedIntake:
             for category in categories
             if category.get("id") is not None
         }
-
-
-def _count_verdicts(rows: list[IntakeRow]) -> dict[str, int]:
-    """Count rows per verdict for the summary block."""
-    counts: dict[str, int] = {}
-    for row in rows:
-        counts[row.verdict] = counts.get(row.verdict, 0) + 1
-    return counts
-
-
-def _chunks(candidates: list[CandidateFeed], size: int) -> list[list[CandidateFeed]]:
-    """Split the candidates into batches small enough to keep the budget."""
-    return [candidates[index : index + size] for index in range(0, len(candidates), size)]
-
-
-def _not_processed_rows(candidates: list[CandidateFeed]) -> list[IntakeRow]:
-    """Report the candidates the batch limit or the time budget left out.
-
-    They are reported, never dropped, so the user knows the payload was only
-    partly handled and can send it again to continue.
-    """
-    return [
-        IntakeRow(
-            url=candidate.url,
-            verdict=str(FeedVerdict.NOT_PROCESSED),
-            processed=False,
-            reason="the intake budget was reached; send the remaining URLs again to continue",
-        )
-        for candidate in candidates
-    ]
-
-
-def _row_payload(row: IntakeRow) -> dict[str, Any]:
-    """Serialize one intake row for the HTTP response."""
-    return {
-        "url": row.url,
-        "verdict": row.verdict,
-        "status_code": row.status_code,
-        "item_count": row.item_count,
-        "added": row.added,
-        "disabled": row.disabled,
-        "duplicate": row.duplicate,
-        "processed": row.processed,
-        "applied_category": row.applied_category,
-        "reported_categories": row.reported_categories,
-        "reason": row.reason,
-    }

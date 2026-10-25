@@ -14,8 +14,9 @@ from app.db.session import get_session
 from app.schemas.errors import error_body
 from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
 from app.services.collector import Collector, normalize_entry, normalize_feed
+from app.services.feed_documents import CandidateFeed, parse_opml, parse_url_list
 from app.services.feed_folders import FeedFolderStore
-from app.services.feed_intake import CandidateFeed, FeedIntake, parse_opml, parse_url_list
+from app.services.feed_intake import FeedIntake
 from app.services.ingestion_runs import IngestionRunStore
 
 router = APIRouter()
