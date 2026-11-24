@@ -24,9 +24,12 @@ class Digest(Base):
     period_start = Column(DateTime)
     period_end = Column(DateTime)
     filters = Column(JSON, default={})
+    entry_ids = Column(JSON, default=[])
     cursor = Column(String(255))
     version = Column(String(50), default="1.0")
-    status = Column(String(50), default="draft")  # draft, ready, failed
+    meta = Column(JSON, default={})
+    status = Column(String(50), default="draft")  # draft, ready, no_news, failed
+    error_summary = Column(Text)
     has_audio = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
