@@ -42,6 +42,16 @@ services:
       ADMIN_USERNAME: ${NAF_MINIFLUX_ADMIN_USERNAME:?NAF_MINIFLUX_ADMIN_USERNAME is required}
       ADMIN_PASSWORD: ${NAF_MINIFLUX_ADMIN_PASSWORD:?NAF_MINIFLUX_ADMIN_PASSWORD is required}
       BASE_URL: http://localhost:${NAF_MINIFLUX_PORT:-8080}
+      # Decision 4: RSS/Atom every 15-30 minutes. 20 keeps the 8-30 source pack
+      # inside the promised window; the reader still honours Cache-Control,
+      # ETag, and Last-Modified, so polling more often costs no full download.
+      POLLING_FREQUENCY: ${NAF_MINIFLUX_POLLING_FREQUENCY:-20}
+      # Fan-out scheduler for due feeds; round_robin spreads the pack across
+      # cycles without starving low-frequency sources.
+      POLLING_SCHEDULER: ${NAF_MINIFLUX_POLLING_SCHEDULER:-round_robin}
+      # Feeds refreshed per scheduler pass. 50 covers the 8-30 source pack with
+      # headroom, so one pass never truncates the pack.
+      BATCH_SIZE: ${NAF_MINIFLUX_BATCH_SIZE:-50}
     volumes:
       - miniflux-data:/var/lib/miniflux
     ports:
