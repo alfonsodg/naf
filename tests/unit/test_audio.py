@@ -59,8 +59,9 @@ def test_a_ready_report_is_synthesized_and_stored(
     assert metadata.version == "1.0"
     assert metadata.digest_id == str(digest.id)
     assert metadata.checksum == hashlib.sha256(audio_wiring.storage.files[asset["filename"]]).hexdigest()
-    assert len(audio_wiring.tts.batches) == 1
-    assert all(len(text) <= MAX_SEGMENT_CHARS for text in audio_wiring.tts.batches[0])
+    assert audio_wiring.tts.texts
+    assert len(audio_wiring.tts.calls) == len(audio_wiring.tts.texts)
+    assert all(len(text) <= MAX_SEGMENT_CHARS for text in audio_wiring.tts.texts)
     assert audio_wiring.tts.configs[0].language == "es-ES"
     audio_session.refresh(digest)
     assert digest.has_audio is True
@@ -74,11 +75,12 @@ def test_a_second_request_returns_the_stored_asset(
     """Only an explicit force synthesizes again."""
     digest = audio_digest()
     first = _post(digest.id).json()["data"]
+    calls = len(audio_wiring.tts.calls)
 
     second = _post(digest.id).json()["data"]
 
     assert second["asset_id"] == first["asset_id"]
-    assert len(audio_wiring.tts.batches) == 1
+    assert len(audio_wiring.tts.calls) == calls
     assert audio_wiring.storage.calls == 1
 
 
@@ -88,11 +90,12 @@ def test_force_regenerates_and_records_a_second_asset(
     """A forced synthesis is a new immutable artifact, not an overwrite."""
     digest = audio_digest()
     first = _post(digest.id).json()["data"]
+    calls = len(audio_wiring.tts.calls)
 
     second = _post(digest.id, force=True).json()["data"]
 
     assert second["asset_id"] != first["asset_id"]
-    assert len(audio_wiring.tts.batches) == 2
+    assert len(audio_wiring.tts.calls) == 2 * calls
     rows = audio_session.execute(select(AudioAsset).where(AudioAsset.digest_id == digest.id)).scalars().all()
     assert len(rows) == 2
 
@@ -108,7 +111,7 @@ def test_a_report_that_is_not_ready_is_refused(
 
     assert response.status_code == 409
     assert response.json()["detail"]["error"]["code"] == "REPORT_NOT_READY"
-    assert audio_wiring.tts.batches == []
+    assert audio_wiring.tts.calls == []
     assert audio_wiring.storage.calls == 0
     audio_session.refresh(digest)
     assert digest.has_audio is False
@@ -126,7 +129,7 @@ def test_an_unconfigured_engine_is_refused_before_any_work(
 
     assert response.status_code == 503
     assert response.json()["detail"]["error"]["code"] == "TTS_NOT_CONFIGURED"
-    assert audio_wiring.tts.batches == []
+    assert audio_wiring.tts.calls == []
     assert audio_wiring.storage.calls == 0
     assert audio_session.execute(select(AudioAsset)).scalars().all() == []
     audio_session.refresh(digest)
@@ -165,7 +168,7 @@ def test_the_stored_file_is_a_valid_wav(
         assert handle.getframerate() == SAMPLE_RATE
         frames = handle.getnframes()
 
-    expected = sum(len(text) * SAMPLES_PER_CHAR for text in audio_wiring.tts.batches[0])
+    expected = sum(len(text) * SAMPLES_PER_CHAR for text in audio_wiring.tts.texts)
     assert frames == expected
     assert asset["duration_seconds"] == pytest.approx(frames / SAMPLE_RATE, abs=0.001)
     assert asset["size_bytes"] == len(data)
@@ -202,7 +205,7 @@ def test_an_unknown_report_is_not_found(audio_session: Session, audio_wiring: An
     """The audio routes refuse an unknown edition before reading anything."""
     assert client.get("/api/v1/reports/999/audio").status_code == 404
     assert _post(999).status_code == 404
-    assert audio_wiring.tts.batches == []
+    assert audio_wiring.tts.calls == []
 
 
 def test_a_synthesis_failure_leaves_the_text_report_available(

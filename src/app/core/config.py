@@ -141,6 +141,17 @@ class Settings(BaseSettings):
         le=2.0,
         description="Speech rate multiplier applied to every segment",
     )
+    tts_segment_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Attempts granted to one segment after its first failure",
+    )
+    tts_segment_retry_delay: float = Field(
+        default=0.5,
+        gt=0,
+        description="Seconds slept between two attempts of the same segment",
+    )
 
     # Audio storage
     audio_storage_path: str = "./storage/audio"

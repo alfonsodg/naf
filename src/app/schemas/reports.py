@@ -76,6 +76,16 @@ class ReportStory(BaseModel):
         return 0 if value is None else value
 
 
+class AudioSegmentOut(BaseModel):
+    """One timed segment of a stored audio asset, as the projection serves it."""
+
+    index: int = Field(description="Position of the segment inside the asset")
+    story_index: int | None = Field(default=None, description="Story the segment voices; empty for the report header")
+    start_seconds: float = Field(description="Playback instant the segment starts at")
+    end_seconds: float = Field(description="Playback instant the segment ends at")
+    text: str = Field(description="Text the voice reads in this segment")
+
+
 class AudioAssetView(BaseModel):
     """One stored audio asset, as the report projection lists it."""
 
@@ -88,6 +98,16 @@ class AudioAssetView(BaseModel):
     provider: str | None = Field(default=None, description="Speech engine that produced the audio")
     voice: str | None = Field(default=None, description="Voice identifier used for synthesis")
     created_at: datetime | None = Field(default=None, description="When the asset was stored, in UTC")
+    segments: list[AudioSegmentOut] = Field(
+        default_factory=list,
+        description="Timed transcript of the asset, in playback order",
+    )
+
+    @field_validator("segments", mode="before")
+    @classmethod
+    def _segment_list(cls, value: Any) -> Any:
+        """Read a column left empty as an empty transcript."""
+        return value or []
 
     @field_validator("created_at", mode="before")
     @classmethod

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import Settings
+from app.core.exceptions import TTSError
 from app.core.ports.storage import AudioStorage
 from app.core.ports.tts import TTSProvider
 from app.db.base import Base
@@ -38,48 +39,51 @@ def _settings(**overrides: Any) -> Settings:
         "miniflux_api_key": "test-token",
         "tts_model_path": "/models/kokoro-v1.0.onnx",
         "tts_voices_path": "/models/voices-v1.0.bin",
+        "tts_segment_retry_delay": 0.001,
         **overrides,
     }
     return Settings(**base)
 
 
 class _FakeTTS(TTSProvider):
-    """Speech engine double: deterministic PCM and a recorded batch call."""
+    """Speech engine double: deterministic PCM and recorded segment calls."""
 
     def __init__(self) -> None:
-        self.batches: list[list[str]] = []
+        self.calls: list[str] = []
+        self.texts: list[str] = []
         self.configs: list[TTSConfig] = []
         self.error: Exception | None = None
+        self.fail_once: set[str] = set()
+        self.always_fail: set[str] = set()
 
     async def synthesize_segment(self, text: str, config: TTSConfig) -> AudioSegment:
-        """Synthesize one segment as the batch path does."""
-        return self._segments([text], config)[0]
-
-    async def synthesize_batch(self, texts: list[str], config: TTSConfig) -> list[AudioSegment]:
-        """Record the batch and return one segment per text."""
-        self.batches.append(list(texts))
+        """Synthesize one segment, honoring the injected failures."""
+        self.calls.append(text)
         self.configs.append(config)
         if self.error is not None:
             raise self.error
-        return self._segments(texts, config)
+        if text in self.always_fail:
+            raise TTSError(f"the engine refused the segment: {text}")
+        if text in self.fail_once:
+            self.fail_once.discard(text)
+            raise TTSError(f"the engine refused the segment once: {text}")
+        self.texts.append(text)
+        salt = len(self.texts)
+        return AudioSegment(
+            text=text,
+            audio_bytes=bytes([salt % 256, salt // 256 % 256]) * (len(text) * SAMPLES_PER_CHAR),
+            duration_seconds=(len(text) * SAMPLES_PER_CHAR) / SAMPLE_RATE,
+            index=len(self.texts) - 1,
+            sample_rate=SAMPLE_RATE,
+        )
+
+    async def synthesize_batch(self, texts: list[str], config: TTSConfig) -> list[AudioSegment]:
+        """Synthesize every text through the segment path, preserving order."""
+        return [await self.synthesize_segment(text, config) for text in texts]
 
     def supports_segmentation(self) -> bool:
         """Declare that the caller owns the segmentation."""
         return True
-
-    def _segments(self, texts: list[str], config: TTSConfig) -> list[AudioSegment]:
-        """Render each text as deterministic mono 16-bit PCM."""
-        salt = len(self.batches)
-        return [
-            AudioSegment(
-                text=text,
-                audio_bytes=bytes([salt % 256, 0]) * (len(text) * SAMPLES_PER_CHAR),
-                duration_seconds=(len(text) * SAMPLES_PER_CHAR) / SAMPLE_RATE,
-                index=index,
-                sample_rate=SAMPLE_RATE,
-            )
-            for index, text in enumerate(texts)
-        ]
 
 
 class _FakeStorage(AudioStorage):
