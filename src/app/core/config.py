@@ -90,10 +90,35 @@ class Settings(BaseSettings):
         description="Seconds one intake request may spend probing candidates",
     )
 
-    # LLM adapter
+    # LLM adapter (report generation)
     llm_provider: str = "openai"
+    llm_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="OpenAI-compatible API root; the adapter appends /chat/completions",
+    )
     llm_api_key: str = Field(default="", description="LLM provider API key")
-    llm_model: str = ""
+    llm_model: str = Field(default="", description="Model identifier; empty means the adapter is not configured")
+    llm_timeout: float = Field(default=60.0, gt=0, description="Seconds allowed for one completion")
+    llm_max_output_tokens: int = Field(
+        default=4000,
+        ge=256,
+        le=32000,
+        description="Hard ceiling on tokens the provider may return for one report",
+    )
+
+    # Report generation
+    report_max_entries: int = Field(
+        default=120,
+        ge=1,
+        le=500,
+        description="Largest selection sent to the model; bounds the per-report cost",
+    )
+    report_default_days: int = Field(
+        default=7,
+        ge=1,
+        le=90,
+        description="Window used when a request names neither a period nor since_last",
+    )
 
     # TTS adapter
     tts_provider: str = "podcastfy"
