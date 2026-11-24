@@ -69,6 +69,30 @@ The reader's polling is declared with the rest: 20 minutes between polls
 (`NAF_MINIFLUX_BATCH_SIZE`). `docs/DEPLOYMENT.md` records that cadence and how
 to verify it through `checked_at` and `next_check_at`.
 
+## Container image
+
+The runtime image is published to GHCR by `.github/workflows/container.yml`.
+A branch push never builds; a tag push does. Issue builds use
+`<type>-<issue>-<n>` (for example `fix-45-1`) and releases use
+`vMAJOR.MINOR.PATCH`:
+
+```bash
+git tag -a fix-45-1 -m "Container build for #45"
+git push origin fix-45-1   # publishes ghcr.io/alfonsodg/naf:fix-45-1 and :sha-<short>
+```
+
+The image runs as `nobody`, exposes port 8000, and carries `alembic.ini`, so a
+deployment applies the schema before starting:
+
+```bash
+docker compose --env-file deploy.env -f deploy/compose/docker-compose.yml run --rm naf alembic upgrade head
+docker compose --env-file deploy.env -f deploy/compose/docker-compose.yml up -d
+```
+
+`deploy.env` supplies `NAF_IMAGE=ghcr.io/alfonsodg/naf:<tag>` and the required
+variables. The stack forwards only the settings listed in
+`docs/DEPLOYMENT.md`; anything else stays at the application default.
+
 ## Quality checks
 
 ```bash

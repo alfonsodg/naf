@@ -9,6 +9,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Container publishing: a tag push builds the multi-stage image and pushes
+  `ghcr.io/alfonsodg/naf:<tag>` plus a `sha-<short>` tag to GHCR, with layer
+  caching and no build on a plain branch push.
 - Entry tag filter: `GET /api/v1/entries` accepts a repeated `tags` parameter,
   forwarded to the reader in that form and combined with AND, so an entry must
   carry every requested tag and each added tag narrows the list.
@@ -100,6 +103,18 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   audio assets, with an initial Alembic migration.
 - Repository standards: `docs/STANDARDS.md`, `docs/DEPLOYMENT.md`,
   `CHANGELOG.md`, canonical label families, and multi-stage container image.
+
+### Fixed
+
+- Feed addresses are pinned to IPv4 when the host resolves to both families.
+  Sorting addresses as text put `2001:…` before `64.…`, and a container without
+  an IPv6 route reported reachable feeds as `http_error` (#44).
+- The compose stack forwards `NAF_FEED_INTAKE_MAX_BYTES` to the container, so a
+  validated feed larger than 1 MB can be imported when the deployment raises
+  the cap (#45).
+- The runtime image copies the `README.md` that `pyproject.toml` names, ships
+  `alembic.ini`, and builds its virtual environment at `/app/.venv` so the
+  console scripts and the non-editable install work after the copy (#43).
 
 ### Changed
 
