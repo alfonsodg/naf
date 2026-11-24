@@ -29,6 +29,6 @@ __pycache__/
 htmlcov/
 
 # Runtime data
-storage/
+/storage/
 *.db
 *.sqlite3
