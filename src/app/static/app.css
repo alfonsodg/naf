@@ -373,6 +373,15 @@ blockquote {
   color: var(--muted);
 }
 
+.badge--official {
+  color: var(--ok-text);
+  background: var(--ok-bg);
+}
+
+.badge--thirdparty {
+  color: var(--muted);
+}
+
 .report-list {
   list-style: none;
   margin: 0;
@@ -485,6 +494,19 @@ blockquote {
   border-radius: var(--radius);
   padding: clamp(0.9rem, 2vw, 1.25rem);
   margin-bottom: 1rem;
+}
+
+.story__source {
+  margin: 0 0 0.5rem;
+}
+
+.uncertainties {
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+}
+
+.uncertainties h4 {
+  color: var(--muted);
 }
 
 .facts {

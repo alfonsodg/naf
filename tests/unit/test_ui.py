@@ -152,6 +152,10 @@ def test_the_report_renders_stories_citations_and_the_synced_player(
     assert "Primera afirmación." in response.text
     assert 'href="https://example.test/uno"' in response.text
     assert "Fuente uno" in response.text
+    assert "Oficial" in response.text
+    assert "Terceros" in response.text
+    assert response.text.count("Incertidumbres") == 1
+    assert "No consta la fecha exacta del anuncio." in response.text
     assert '<audio id="report-audio"' in response.text
     assert 'id="audio-segments"' in response.text
     assert "Introducción a la primera historia." in response.text

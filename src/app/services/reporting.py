@@ -155,6 +155,8 @@ class ReportService:
                 claims=story.claims,
                 citations=[citation.model_dump() for citation in story.citations],
                 pub_type=story.pub_type,
+                official=story.official,
+                uncertainties=story.uncertainties,
                 entities=story.entities,
                 order_index=index,
             )

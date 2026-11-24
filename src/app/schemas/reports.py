@@ -60,10 +60,18 @@ class ReportStory(BaseModel):
     claims: list[str] = Field(default_factory=list, description="Factual statements the story makes")
     citations: list[Citation] = Field(default_factory=list, description="Sources backing the claims")
     pub_type: str | None = Field(default=None, description="Announcement, release, research, news, or opinion")
+    official: bool | None = Field(
+        default=None,
+        description="True when the creator's own channel announces it, false for third-party coverage, null when unknown",
+    )
+    uncertainties: list[str] = Field(
+        default_factory=list,
+        description="Statements the cited entries do not support and that must not be read as facts",
+    )
     entities: list[dict[str, Any]] = Field(default_factory=list, description="Entities the story mentions")
     order_index: int = Field(default=0, description="Position of the story inside the report")
 
-    @field_validator("claims", "citations", "entities", mode="before")
+    @field_validator("claims", "citations", "uncertainties", "entities", mode="before")
     @classmethod
     def _empty_list(cls, value: Any) -> Any:
         """Read a column left empty as an empty list."""

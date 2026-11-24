@@ -63,6 +63,7 @@ def _story(**overrides: Any) -> dict[str, Any]:
         ],
         "pub_type": "release",
         "official": True,
+        "uncertainties": ["El precio y la licencia no constan en las entradas."],
     }
     story.update(overrides)
     return story
@@ -112,12 +113,31 @@ async def test_a_valid_answer_becomes_a_digest_with_authoritative_citations() ->
     assert digest.period_start == "2026-11-20T10:00:00+00:00"
     assert digest.period_end == "2026-11-21T09:30:00+00:00"
     assert digest.stories[0].pub_type == "release"
+    assert digest.stories[0].official is True
+    assert digest.stories[0].uncertainties == ["El precio y la licencia no constan en las entradas."]
+    system = payloads[0]["messages"][0]["content"]
+    assert '"official": true|false|null' in system
+    assert '"uncertainties"' in system
     citations = digest.stories[0].citations
     assert [citation.entry_id for citation in citations] == ["101", "102"]
     assert [citation.entry_url for citation in citations] == [ENTRIES[0]["url"], ENTRIES[1]["url"]]
     assert [citation.title for citation in citations] == [ENTRIES[0]["title"], ENTRIES[1]["title"]]
     assert [citation.author for citation in citations] == ["Equipo X", "Analista"]
     assert citations[0].quote == "pesos abiertos"
+
+
+async def test_a_story_without_editorial_fields_is_unknown_and_empty() -> None:
+    """An answer that omits both fields keeps the story without guessing a source."""
+    story = _story()
+    story.pop("official")
+    story.pop("uncertainties")
+    transport, _, _ = _transport([_completion(_report(story))])
+    generator = OpenAIReportGenerator(_settings(), transport)
+
+    digest = await generator.generate(ENTRIES, {})
+
+    assert digest.stories[0].official is None
+    assert digest.stories[0].uncertainties == []
 
 
 async def test_an_unknown_citation_id_triggers_one_repair_call() -> None:

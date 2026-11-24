@@ -48,6 +48,8 @@ class DigestStory(Base):
     claims = Column(JSON, default=[])
     citations = Column(JSON, default=[])
     pub_type = Column(String(100))
+    official = Column(Boolean)
+    uncertainties = Column(JSON, default=[])
     entities = Column(JSON, default=[])
     order_index = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
