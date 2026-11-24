@@ -673,7 +673,7 @@ may only change through an explicit new decision.
 | 5 | Report duration, style, timezone | 5–8 minutes as a flexible target; conversational Spanish with explicit citations; UTC for storage, local timezone for display |
 | 6 | TTS modality, cost, privacy | Local or remote selected by configuration, local preferred for privacy; per-report cost limit; configurable Spanish voice; **no voice cloning** |
 | 7 | Environment and audio storage | Local PostgreSQL and a local Miniflux container for development; `storage/audio/` on the filesystem behind a storage port that allows S3-compatible backends later |
-| 8 | Retention | Keep metadata and URLs; avoid full-body copies by default; immutable report and audio editions with configurable cleanup, tentatively 30–90 days |
+| 8 | Retention | Keep metadata and URLs; avoid full-body copies by default; immutable report and audio editions with configurable cleanup. Window: 90 days after an entry is read (180 for unread entries), cleanup every 24 h. Per cited story NAF keeps the entry id, URL, title, and author it already stores; it never mirrors full bodies |
 | 9 | Feedly API | Not a dependency of the MVP. Optional future integration only. |
 | 10 | Automatic delivery | Explicit user request only. No email, Telegram, push, or per-user RSS in the MVP. |
 
@@ -685,6 +685,11 @@ Consequences worth stating, because they constrain later work:
   versioned so a second client is a client, not a rewrite.
 - Decision 6 keeps Podcastfy as a candidate, not a commitment. The audio engine is
   chosen by the Phase 5 comparison, and the `audio` extra remains optional.
+- Decision 8 fixes retention at 90 days after an entry is read (180 for unread
+  entries) instead of the reader's inherited 60 and 180. The reader deletes the
+  content it owns; NAF keeps, per cited story, the entry id, URL, title, and
+  author captured when the report was written, so a citation stays identifiable
+  after the entry is archived, though its body is not reproducible from NAF.
 - Decision 10 forbids scheduling. Report generation is user-triggered only, so no
   background job may be introduced without revisiting this row.
 

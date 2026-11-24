@@ -54,6 +54,15 @@ services:
       # Feeds refreshed per scheduler pass. 50 covers the 8-30 source pack with
       # headroom, so one pass never truncates the pack.
       BATCH_SIZE: ${NAF_MINIFLUX_BATCH_SIZE:-50}
+      # Decision 8 (retention): the cleanup is declared here instead of left at
+      # the reader's inherited defaults (60 and 180 days). The approved window
+      # is 90 days after an entry is read; unread entries get 180 so nothing
+      # expires before it had a chance to be read. Archiving writes a tombstone,
+      # so an archived entry is never imported again by a later feed refresh.
+      CLEANUP_ARCHIVE_READ_DAYS: ${NAF_MINIFLUX_CLEANUP_READ_DAYS:-90}
+      CLEANUP_ARCHIVE_UNREAD_DAYS: ${NAF_MINIFLUX_CLEANUP_UNREAD_DAYS:-180}
+      # Hours between cleanup runs; 24 keeps the window exact to a day.
+      CLEANUP_FREQUENCY: ${NAF_MINIFLUX_CLEANUP_FREQUENCY:-24}
     volumes:
       - miniflux-data:/var/lib/miniflux
     ports:
@@ -103,6 +112,30 @@ services:
       - "127.0.0.1:${NAF_PORT:?NAF_PORT is required}:8000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Issue #47: the API has no authentication of its own, so this proxy is the
+  # only public surface and the API keeps its loopback publication above. The
+  # config is tracked; the password file is a deployment artefact and is never
+  # committed. Plain HTTP, so the credentials travel unencrypted until TLS or
+  # a private network replaces it.
+  proxy:
+    image: nginx:1.27-alpine
+    depends_on: naf
+    volumes:
+      # Relative paths resolve from this file's directory, so ../proxy is
+      # deploy/proxy. The config is included by the stock nginx.conf inside
+      # its http block.
+      - ../proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${NAF_PROXY_HTPASSWD:?NAF_PROXY_HTPASSWD is required}:/etc/nginx/htpasswd:ro
+    ports:
+      - "${NAF_PROXY_PORT:-18082}:8080"
+    healthcheck:
+      # /health is the only unauthenticated path, answered by the upstream
+      # liveness route; every other path answers 401 without credentials.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

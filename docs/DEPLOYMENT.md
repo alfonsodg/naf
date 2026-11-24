@@ -14,34 +14,40 @@ the local-only ground truth for hosts, ports, and credentials.
 
 ## Topology
 
-Two runtimes plus one external dependency:
+Three runtimes plus one external dependency:
 
 | Component | Role | Ownership |
 | --- | --- | --- |
+| `proxy` | Public edge: HTTP Basic auth in front of the API | This repository, `deploy/proxy/nginx.conf` |
 | `naf` | Complement API: reports, citations, audio, classification | This repository |
 | `db` | NAF persistence: digests, citations, entities, audio metadata | This repository |
 | `miniflux` | Feed reader: subscriptions, entries, read state, categories | External (Apache-2.0) |
 | `miniflux-db` | Miniflux persistence | Miniflux; never accessed by NAF |
 
 ```text
-          ┌──────────┐        ┌───────────┐        ┌─────────┐
- client ──▶│   naf    │───────▶│ miniflux  │───────▶│  feeds  │
-          │  :8000   │  REST  │   :8080   │  HTTP  │ (public)│
-          └────┬─────┘        └───────────┘        └─────────┘
-               │
-               ▼
-          ┌──────────┐
-          │    db    │  naf-owned data only
-          │  :5432   │
-          └──────────┘
+          ┌───────────┐       ┌──────────┐       ┌───────────┐       ┌─────────┐
+ client ──▶│   proxy   │──────▶│   naf    │──────▶│ miniflux  │──────▶│  feeds  │
+          │  :18082   │ HTTP  │  :8000   │ REST  │   :8080   │ HTTP  │ (public)│
+          │ basic auth│       │ loopback │       │           │       │         │
+          └───────────┘       └────┬─────┘       └───────────┘       └─────────┘
+                                   │
+                                   ▼
+                              ┌──────────┐
+                              │    db    │  naf-owned data only
+                              │  :5432   │
+                              └──────────┘
 ```
 
-Service names (`naf`, `db`) are fixed once deployed. Other services and any
-reverse proxy resolve them by DNS name; renaming breaks the deployment.
+Service names (`proxy`, `naf`, `db`) are fixed once deployed. Other services and
+any reverse proxy resolve them by DNS name; renaming breaks the deployment.
 
 ## Networking
 
-- `naf` exposes `/health` for liveness and `/api/v1/*` for the API.
+- `proxy` publishes the only public port and forwards to `http://naf:8000`
+  over the compose network. It is the only service meant to be reachable from
+  outside the host.
+- `naf` exposes `/health` for liveness and `/api/v1/*` for the API, published on
+  `127.0.0.1` only.
 - Miniflux is reached over HTTP using `NAF_MINIFLUX_URL` with an
   `X-Auth-Token` header. Communication is API-only. In development the URL
   points at the `miniflux` service of the compose stack.
@@ -60,7 +66,39 @@ through `NAF_MINIFLUX_URL`.
 | Sandbox, published port 18081 | `http://<host-address>:18081` |
 
 The NAF API keeps its own loopback publication: publishing the reader does not publish
-the API, which has no authentication layer.
+the API, which has no authentication layer of its own. The edge proxy below is the
+only public surface.
+
+## Public API surface (auth proxy)
+
+The API has no authentication of its own, so its only public surface is the
+`proxy` service: an nginx container that terminates HTTP Basic authentication
+and forwards to `http://naf:8000` over the compose network. The API keeps its
+loopback publication (`127.0.0.1:<NAF_PORT>:8000`); publishing port 8000 on
+any other interface bypasses the proxy and is forbidden.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NAF_PROXY_PORT` | `18082` | Host port that publishes the proxy container port 8080 |
+| `NAF_PROXY_HTPASSWD` | `../proxy/htpasswd` | Host path of the password file, mounted read-only at `/etc/nginx/htpasswd` |
+
+The config is tracked at `deploy/proxy/nginx.conf`: `server_tokens off`, a 300 s
+read timeout for report generation and audio synthesis, an 8 MB body limit, and
+a request limit on `POST /api/v1/reports` (1 request/s, burst 10). `/health` is
+the only unauthenticated path, so the container healthcheck and an external
+liveness probe work; every other path answers `401` without credentials.
+
+The password file is a deployment artefact and lives outside the repository: in
+a deployment, point `NAF_PROXY_HTPASSWD` at an absolute path outside the
+checkout, such as `/srv/naf/proxy/htpasswd`. Create it with
+`htpasswd -c -B <path> <user>` under `umask 077`, which leaves it at mode
+`0600` while the password is written, then set `0644` so the nginx worker can
+read it through the read-only mount. It is never committed, never copied into
+an image, and never written into the compose file; the repository default
+`deploy/proxy/htpasswd` is gitignored only as a local convenience.
+
+Plain HTTP sends the credentials in clear, so this is a test-host exposure
+until TLS or a private network replaces it.
 
 ## Reader polling cadence
 
@@ -93,6 +131,43 @@ Verification, once the stack is up:
 - `GET /api/v1/feeds/health` reports the freshness and the parsing errors of
   every feed, which is where a poll that keeps failing becomes visible.
 
+## Retention
+
+Decision 8 fixes an explicit retention window, and the stack declares it instead
+of inheriting the reader's defaults (60 days for read entries and 180 for
+unread):
+
+| Variable | Value | Meaning |
+| --- | --- | --- |
+| `NAF_MINIFLUX_CLEANUP_READ_DAYS` | `90` | Days after an entry is read before the reader archives it |
+| `NAF_MINIFLUX_CLEANUP_UNREAD_DAYS` | `180` | Days an unread entry stays before the reader archives it |
+| `NAF_MINIFLUX_CLEANUP_FREQUENCY` | `24` | Hours between cleanup runs |
+
+The window is 90 days, the top of the 30–90 range decision 8 approves: a read
+entry stays a full quarter before it is archived. Unread entries get 180 days so
+nothing expires before it has had a chance to be read, and the value is never
+set below the read one. The cleanup runs once a day, so the window is exact to a
+day. Every `env.*` file carries the same three values, and the compose file
+declares them as its defaults.
+
+What the reader deletes: non-bookmarked and non-shared entries past their
+window, together with the content it stored for them, and it records a tombstone
+so a later feed refresh cannot import the same entry again. The reader remains
+the owner of entry content; NAF never mirrors it.
+
+What NAF keeps: every stored report keeps, per story, its claims and citations.
+Each citation carries the entry id, URL, title, and author captured when the
+report was written (plus the optional quote and relevance score), and it lives
+in the NAF database, not in the reader.
+
+A citation whose entry was archived keeps its stored id, URL, title, and author:
+the report detail still renders it and its URL opens at the publisher. The
+reader no longer resolves that entry, and NAF cannot re-read the body or
+regenerate that edition's source text from the reader; the NAF-owned report, its
+citations, and its audio are untouched. Changing a cleanup value affects future
+cleanup runs only, and no volume is deleted, truncated, or recreated for
+retention.
+
 ## Runtime settings forwarded by the stack
 
 The compose file forwards a curated set to the `naf` container. A setting that is
@@ -118,6 +193,10 @@ it, because the container never receives the variable.
 Raise the cap only for a validated source that publishes more than the default,
 and keep the value bounded: it is a memory limit, not a preference.
 
+`NAF_PROXY_PORT` and `NAF_PROXY_HTPASSWD` are consumed by the `proxy` service,
+never forwarded to the `naf` container; `NAF_MINIFLUX_CLEANUP_*` is consumed by
+`miniflux`, not forwarded to `naf` either.
+
 ## Database migrations
 
 The runtime image carries `alembic.ini` and the migration scripts under
@@ -134,19 +213,23 @@ provides, so no DSN is stored in the image or in `alembic.ini`.
 
 ## Exposure boundary
 
-The MVP has no authentication layer, because it is built for a single private
-user. The service must therefore never be exposed to a public interface: it
-creates subscriptions, triggers outbound downloads, and will generate the
-reports.
+The API has no authentication layer of its own, because it is built for a
+single private user: it creates subscriptions, triggers outbound downloads, and
+generates reports. Its only guard is the edge proxy, so the API must never be
+published directly.
 
-- The API is reachable from the local host or from an internal network only.
-- Any exposure to a public interface requires an authentication layer first,
-  and that layer is a separate decision, not a configuration tweak.
-- The development stack publishes the API port on the loopback interface for
-  that reason. The reader keeps its own administrator credentials and is not
-  the complement's concern.
+- The API is published on the loopback interface only. Publishing port 8000 on
+  any other interface bypasses the proxy and is forbidden.
+- The proxy terminates HTTP Basic authentication on the only published port;
+  every path except `/health` answers `401` without credentials.
+- Any other exposure still requires an authentication layer and remains a
+  separate decision, not a configuration tweak.
+- The reader keeps its own administrator credentials and is not the
+  complement's concern.
 - The rule applies to every environment, including a test one. A test server
-  reachable from the internet is exposed too.
+  reachable from the internet is exposed too, and Basic auth over plain HTTP
+  sends the password in clear: TLS or a private network is required before this
+  counts as more than a test exposure.
 
 ## Persistent storage
 
@@ -218,6 +301,7 @@ The initial migration is `435254b79450` (complement schema). Verify with
 curl -fsS "$NAF_BASE_URL/health"
 curl -fsS "$NAF_BASE_URL/api/v1/health/ready"
 curl -fsS "$NAF_MINIFLUX_URL/healthcheck"
+curl -fsS -u "<proxy-user>" "http://<host>:18082/health"
 ```
 
 - `/health` is a liveness probe: it answers 200 as long as the process is up and
@@ -226,6 +310,8 @@ curl -fsS "$NAF_MINIFLUX_URL/healthcheck"
   Miniflux API, returns 200 when both respond, and 503 with a per-dependency
   breakdown when either fails. A load balancer should route on this endpoint.
 - Miniflux's `/healthcheck` returns 200 with body `OK`.
+- The proxy answers `200` on `/health` with credentials and `401` without them;
+  `<proxy-user>` is the user created in the password file.
 
 A liveness 200 is a smoke check only and does not replace endpoint-level tests.
 
@@ -253,3 +339,6 @@ local workstation.
 | Immutable tag | Image tag never reused once published |
 | Smoke check | Liveness call that does not replace functional tests |
 | Zero destruction | Prohibition on commands that can remove volumes or schemas |
+| Edge proxy | nginx that authenticates and forwards to the API; the only public surface |
+| Retention window | 90 days after an entry is read before the reader archives it |
+| Tombstone | Reader record that stops an archived entry from being re-imported |

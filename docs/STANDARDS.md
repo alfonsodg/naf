@@ -193,6 +193,14 @@ of the pass, never a precondition for it: a storage problem is logged and the
 pass continues. The run is closed on every exit, including the paths that
 raise, so no row is ever left running by a pass that never finished.
 
+Retention is an explicit decision, not a provider default. The stack declares
+the reader's cleanup (decision 8): 90 days after an entry is read, 180 days for
+an unread one, run once a day. NAF keeps, with every citation, the entry id,
+URL, title, and author captured when the report was written, and never a copy of
+the body. A citation therefore outlives the reader's copy: its identifying
+fields and its link remain, while the body and any regeneration from the reader
+do not. No retention action deletes, truncates, or recreates a volume.
+
 ## Feed intake and validation
 
 A feed URL arriving from a pasted list, an OPML export, or a form field is
