@@ -11,6 +11,7 @@ from typing import Any
 
 from app.core.ports.feed_reader import FeedReader
 from app.schemas.reports import ReportCreateRequest
+from app.services.collector import normalize_entry
 
 
 async def select_entries(
@@ -45,8 +46,17 @@ async def select_entries(
         if request.starred is not None:
             filters["starred"] = request.starred
         entries, _total = await reader.get_entries_page(**filters)
-        collected.extend(entries)
+        collected.extend(project(entry) for entry in entries)
     return deduplicate(collected)[:limit]
+
+
+def project(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return the NAF entry shape from a reader entry or an already-projected one.
+
+    The reader adapter returns its own document; the generator needs the
+    normalized shape with ``entry_id`` and a flat feed title.
+    """
+    return entry if "entry_id" in entry else normalize_entry(entry)
 
 
 def deduplicate(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
