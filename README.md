@@ -130,6 +130,9 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/opml/export` | Export subscriptions as OPML |
 | `POST` | `/api/v1/opml/import` | Deprecated: stores the OPML without validating its feeds |
 | `POST` | `/api/v1/collect` | Run one pass, optionally from a publication cutoff |
+| `POST` | `/api/v1/reports` | Generate and store one cited report |
+| `GET` | `/api/v1/reports` | List the stored reports, newest first |
+| `GET` | `/api/v1/reports/{report_id}` | One report with its stories and citations |
 | `GET` | `/api/v1/ingestion-runs` | List recorded passes with an optional status filter |
 | `GET` | `/api/v1/ingestion-runs/{run_id}` | Read one recorded pass with its per-feed errors |
 
@@ -217,6 +220,28 @@ without losing its entries and their read state, pause it instead:
 `PATCH /api/v1/feeds/{id}` with `{"disabled": true}` stops the polling and
 keeps everything. The delete answer keeps `feed_id` and `removed` and adds a
 `warning` that names the cascade.
+
+## Reports
+
+`POST /api/v1/reports` turns a selection of entries into a Spanish report with
+citations, stores it, and returns the edition. The selection accepts a period
+(UTC), feeds, categories, tags, a reader search, read/starred state, and
+`since_last`, which starts after the newest saved cursor so nothing is reported
+twice unless asked.
+
+- Every story carries its claims and the citations that support them; the
+  adapter fills each citation's URL, title, and author from the stored entry, so
+  the model cannot invent them. One repair attempt is allowed before the edition
+  fails with `502`.
+- An empty selection answers `201` with `status: no_news` and an explicit
+  Spanish message; it never recycles an older report.
+- Each edition keeps its filters, the included entry ids, the model, the prompt
+  version, and the cursor, which is what makes it reproducible.
+- `GET /api/v1/reports` lists the history and `GET /api/v1/reports/{id}` returns
+  the stories with their citations.
+- The generator needs an OpenAI-compatible provider: `NAF_LLM_BASE_URL`,
+  `NAF_LLM_API_KEY`, and `NAF_LLM_MODEL`. Without a model the routes answer
+  `503 REPORT_GENERATOR_NOT_CONFIGURED` and the history stays readable.
 
 ## Documentation
 
