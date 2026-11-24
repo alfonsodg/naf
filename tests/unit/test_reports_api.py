@@ -176,9 +176,7 @@ def test_a_report_is_served_and_stored_with_its_stories(session: Session, wire: 
     assert len(_stored(session).stories) == 1
 
 
-def test_a_raw_reader_entry_is_projected_before_the_generator(
-    session: Session, wire: Callable[..., None]
-) -> None:
+def test_a_raw_reader_entry_is_projected_before_the_generator(session: Session, wire: Callable[..., None]) -> None:
     """The reader returns its own document; the generator needs the NAF shape."""
     raw = {
         "id": 77,
