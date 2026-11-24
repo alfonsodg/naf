@@ -81,6 +81,7 @@ class MinifluxClient(FeedReader):
         search: str | None = None,
         published_after: datetime | None = None,
         published_before: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """List entries with optional filters."""
         entries, _ = await self.get_entries_page(
@@ -93,6 +94,7 @@ class MinifluxClient(FeedReader):
             search=search,
             published_after=published_after,
             published_before=published_before,
+            tags=tags,
         )
         return entries
 
@@ -107,8 +109,13 @@ class MinifluxClient(FeedReader):
         search: str | None = None,
         published_after: datetime | None = None,
         published_before: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
-        """List one page of entries and return it with the total count."""
+        """List one page of entries and return it with the total count.
+
+        Tags are sent as repeated parameters because the reader expects that
+        form and combines them with AND. An absent filter sends nothing.
+        """
         params: dict[str, Any] = {"limit": limit, "offset": offset}
         if feed_id is not None:
             params["feed_id"] = feed_id
@@ -124,6 +131,8 @@ class MinifluxClient(FeedReader):
             params["published_after"] = int(published_after.timestamp())
         if published_before is not None:
             params["published_before"] = int(published_before.timestamp())
+        if tags:
+            params["tags"] = tags
 
         response = await self._request("GET", "/v1/entries", params=params)
         payload = response.json()

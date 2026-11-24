@@ -13,7 +13,7 @@ from app.core.exceptions import MinifluxAPIError
 from app.db.session import get_session
 from app.schemas.errors import error_body
 from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
-from app.services.collector import Collector, normalize_entry, normalize_feed
+from app.services.collector import Collector, normalize_feed
 from app.services.feed_documents import CandidateFeed, parse_opml, parse_url_list
 from app.services.feed_folders import FeedFolderStore
 from app.services.feed_intake import FeedIntake
@@ -198,70 +198,6 @@ async def intake_feeds(request: Request, session: SessionDep) -> dict[str, Any]:
 async def list_feed_folders(session: SessionDep) -> dict[str, Any]:
     """List the folders found for the feeds, besides the applied category."""
     return {"data": FeedFolderStore(session).list_folders()}
-
-
-@router.get("/entries")
-async def list_entries(
-    feed_id: int | None = None,
-    category_id: int | None = None,
-    page: PageQuery = 1,
-    per_page: LimitQuery = 50,
-    search: str | None = None,
-    read: bool | None = None,
-    starred: bool | None = None,
-    published_after: datetime | None = None,
-    published_before: datetime | None = None,
-) -> dict[str, Any]:
-    """List normalized entries preserving provenance, with pagination metadata."""
-    offset = (page - 1) * per_page
-    try:
-        entries, total = await _client().get_entries_page(
-            feed_id=feed_id,
-            category_id=category_id,
-            limit=per_page,
-            offset=offset,
-            search=search,
-            read=read,
-            starred=starred,
-            published_after=_utc(published_after),
-            published_before=_utc(published_before),
-        )
-    except MinifluxAPIError as exc:
-        raise _unavailable(exc) from exc
-
-    total_pages = (total + per_page - 1) // per_page if total else 0
-    return {
-        "data": [normalize_entry(entry) for entry in entries],
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": total_pages,
-        },
-    }
-
-
-@router.get("/entries/{entry_id}")
-async def read_entry(entry_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
-    """Return one entry with the same shape the list returns."""
-    try:
-        entry = await _client().get_entry(entry_id)
-    except MinifluxAPIError as exc:
-        raise _unavailable(exc) from exc
-    return {"data": normalize_entry(entry)}
-
-
-@router.patch("/entries/{entry_id}")
-async def update_entry(
-    entry_id: Annotated[int, Path(ge=1)],
-    status: Annotated[str, Body(embed=True, pattern="^(read|unread)$")],
-) -> dict[str, Any]:
-    """Update the read status of one entry."""
-    try:
-        updated = await _client().update_entries_status([entry_id], status)
-    except MinifluxAPIError as exc:
-        raise _unavailable(exc) from exc
-    return {"data": {"entry_id": entry_id, "status": status, "updated": updated}}
 
 
 @router.get("/opml/export")

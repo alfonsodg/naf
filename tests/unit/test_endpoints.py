@@ -205,6 +205,41 @@ def test_entries_without_a_period_keep_the_current_behaviour() -> None:
     assert captured["published_before"] is None
 
 
+def test_the_tags_reach_the_reader_as_a_repeated_parameter() -> None:
+    """Several tags are forwarded as a list and combine with the other filters."""
+    captured: dict[str, Any] = {}
+
+    async def get_entries_page(self: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+        captured.update(kwargs)
+        return [], 0
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.MinifluxClient, "get_entries_page", get_entries_page)
+        response = client.get(
+            "/api/v1/entries",
+            params=[("feed_id", "1"), ("tags", "security"), ("tags", "ai")],
+        )
+
+    assert response.status_code == 200
+    assert captured["feed_id"] == 1
+    assert captured["tags"] == ["security", "ai"]
+
+
+def test_entries_without_tags_send_no_filter() -> None:
+    """An absent tag filter leaves the reader call unchanged."""
+    captured: dict[str, Any] = {}
+
+    async def get_entries_page(self: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+        captured.update(kwargs)
+        return [], 0
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.MinifluxClient, "get_entries_page", get_entries_page)
+        client.get("/api/v1/entries")
+
+    assert captured["tags"] is None
+
+
 def test_the_entry_detail_is_served() -> None:
     """One entry is served with the same shape the list returns."""
     response = client.get("/api/v1/entries/10")

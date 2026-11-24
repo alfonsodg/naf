@@ -77,6 +77,42 @@ async def test_get_entries_sends_the_publication_period(
     assert params["published_before"] == int(datetime(2026, 10, 19, tzinfo=UTC).timestamp())
 
 
+async def test_get_entries_sends_tags_as_a_repeated_parameter(
+    client: MinifluxClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each tag is a repeated query parameter, never a comma-joined list."""
+    captured: dict[str, object] = {}
+
+    async def fake_request(method: str, path: str, **kwargs: object) -> httpx.Response:
+        captured.update(kwargs)
+        return _response(200, json_body={"entries": []})
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    await client.get_entries(tags=["security", "ai"])
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["tags"] == ["security", "ai"]
+    request = httpx.Request("GET", "https://miniflux.test/v1/entries", params=params)
+    assert request.url.params.get_list("tags") == ["security", "ai"]
+
+
+async def test_get_entries_omits_tags_when_absent(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No tag filter sends no tags parameter at all."""
+    captured: dict[str, object] = {}
+
+    async def fake_request(method: str, path: str, **kwargs: object) -> httpx.Response:
+        captured.update(kwargs)
+        return _response(200, json_body={"entries": []})
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    await client.get_entries()
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert "tags" not in params
+
+
 async def test_delete_feed_removes_the_subscription(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """The delete call reaches the reader endpoint and reports the outcome."""
     captured: dict[str, object] = {}

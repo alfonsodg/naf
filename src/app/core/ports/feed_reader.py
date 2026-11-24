@@ -28,8 +28,9 @@ class FeedReader(ABC):
         search: str | None = None,
         published_after: datetime | None = None,
         published_before: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """List entries honoring every optional filter."""
+        """List entries honoring every optional filter; repeated tags require all of them."""
 
     @abstractmethod
     async def get_entries_page(
@@ -43,6 +44,7 @@ class FeedReader(ABC):
         search: str | None = None,
         published_after: datetime | None = None,
         published_before: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """List one page of entries and report the unpaginated total."""
 
