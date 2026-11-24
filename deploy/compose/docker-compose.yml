@@ -68,7 +68,7 @@ services:
     ports:
       - "${NAF_MINIFLUX_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/healthcheck || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/healthcheck || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -135,7 +135,7 @@ services:
     healthcheck:
       # /health is the only unauthenticated path, answered by the upstream
       # liveness route; every other path answers 401 without credentials.
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
