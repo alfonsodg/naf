@@ -17,6 +17,7 @@ REMOTE.md
 debug/
 reference/
 _*/
+worktrees/
 
 # Python and tooling caches
 __pycache__/
