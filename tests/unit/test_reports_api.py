@@ -278,7 +278,7 @@ def test_the_entry_cap_is_enforced(session: Session, wire: Callable[..., None]) 
     assert reader.calls[0]["limit"] == 2
 
 
-def test_the_selection_filters_are_forwarded_to_the_reader(wire: Callable[..., None]) -> None:
+def test_the_selection_filters_are_forwarded_to_the_reader(session: Session, wire: Callable[..., None]) -> None:
     """Feeds, categories, tags, search, and state reach the reader unchanged."""
     reader = _FakeReader([_entry(1, "2026-11-23T09:00:00Z")])
     wire(reader, _FakeGenerator())
