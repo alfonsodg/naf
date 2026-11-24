@@ -18,12 +18,17 @@ class AudioAssetMetadata(BaseModel):
 
 
 class AudioSegment(BaseModel):
-    """One synthesized speech segment."""
+    """One synthesized speech segment.
+
+    ``audio_bytes`` holds mono 16-bit little-endian PCM at ``sample_rate``; the
+    storage layer frames the concatenated segments into one WAV file.
+    """
 
     text: str
     audio_bytes: bytes
     duration_seconds: float
     index: int
+    sample_rate: int = 24_000
 
 
 class TTSConfig(BaseModel):

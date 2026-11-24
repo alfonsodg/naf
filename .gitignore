@@ -60,7 +60,7 @@ venv/
 htmlcov/
 
 # App runtime data
-storage/
+/storage/
 *.db
 *.sqlite3
 
