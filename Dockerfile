@@ -17,7 +17,7 @@ COPY pyproject.toml uv.lock README.md ./
 RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev --no-install-project
 
 COPY src/ src/
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-editable
 
 # --- Stage 2: runtime ---
 FROM python:3.13-slim AS runtime
