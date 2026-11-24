@@ -9,6 +9,23 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Entry tag filter: `GET /api/v1/entries` accepts a repeated `tags` parameter,
+  forwarded to the reader in that form and combined with AND, so an entry must
+  carry every requested tag and each added tag narrows the list.
+- Ingestion run history: `GET /api/v1/ingestion-runs` lists the recorded passes
+  newest first with pagination and an optional `status` filter, and
+  `GET /api/v1/ingestion-runs/{run_id}` serves one pass with its per-feed
+  errors, or the documented `INGESTION_RUN_NOT_FOUND` 404 envelope.
+- The entry projection keeps the reader's last known modification beside the
+  other two dates: `published_at` is what the publisher declares, `created_at`
+  is when the reader captured the entry, and `changed_at` is the modification.
+- `POST /api/v1/collect` accepts an optional `since` timestamp, read as UTC
+  when it carries no zone, that scopes the pass to entries published at or
+  after the cutoff; an undated entry is kept instead of being dropped.
+- Curated technical radar feed pack (`feeds/alfonso-articles.opml`) with 18
+  validated feeds and the approved taxonomy in the outline trail, plus
+  `feeds/README.md` with the mapping, the validation record, and the import
+  command.
 - Feed intake (`POST /api/v1/feeds/intake`) that accepts a pasted list of URLs
   (one per line) or an OPML export and validates every candidate over HTTP
   before adding it, with a per-URL report of verdict, status, item count, and
@@ -86,6 +103,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- The entry routes moved to `src/app/routers/entries.py`; every URL path and
+  response shape is unchanged.
+- The reader polls every 20 minutes with the `round_robin` scheduler and 50
+  feeds per pass, inside decision 4's 15-30 minute window. The three values are
+  declared through `NAF_MINIFLUX_POLLING_FREQUENCY`,
+  `NAF_MINIFLUX_POLLING_SCHEDULER`, and `NAF_MINIFLUX_BATCH_SIZE` in every
+  environment file and in the development stack, so the cadence is stated
+  instead of inherited from the reader's defaults.
+- `DELETE /api/v1/feeds/{id}` now states what the reader does: the subscription
+  and every entry it carried are deleted, the response keeps `feed_id` and
+  `removed` and adds a `warning` that names the cascade, and
+  `docs/STANDARDS.md` no longer claims the entries stay untouched. Pausing with
+  `PATCH /feeds/{id}` is the non-destructive way to stop following a feed.
+- `opentelemetry-api` pinned to 1.45.2 in `uv.lock`, the first release past
+  advisory GHSA-mf5v-w3w3-f6cg, which was failing the dependency audit.
 - `POST /api/v1/opml/import` is deprecated in favour of `POST /feeds/intake`:
   Miniflux stores an imported OPML without fetching anything, so dead feeds
   enter the reader silently and the import is not atomic.

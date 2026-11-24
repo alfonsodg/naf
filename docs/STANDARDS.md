@@ -5,7 +5,7 @@
 | **Project** | naf — Categorized feed aggregator with audio reports |
 | **Version** | Unreleased |
 | **Created** | 2026-10-18 |
-| **Updated** | 2026-10-18 18:20 |
+| **Updated** | 2026-11-24 |
 | **Author** | Alfonso de la Guarda Reyes |
 | **Location** | `docs/STANDARDS.md` |
 
@@ -100,6 +100,12 @@ services, or `db`; `tests/unit/test_app_structure.py` enforces this.
 - Timestamps cross the API as ISO-8601 and are normalised to UTC at the
   boundary; a value without a zone is read as UTC. The reader receives unix
   timestamps, which is the format its API expects.
+- An entry carries three distinct dates and they are never interchangeable:
+  `published_at` is what the publisher declares, `created_at` is when the
+  reader captured the entry, and `changed_at` is its last known modification
+  in the reader. A date the reader does not report is `null` with the key
+  still present, so a caller never has to tell a missing key from a missing
+  value.
 
 ## Linting and formatting
 
@@ -158,14 +164,19 @@ ingestion runs in its own PostgreSQL database.
 
 The NAF API owns the feed write surface: adding, renaming, moving, pausing,
 refreshing, and removing a subscription. Removing one deletes the subscription
-from the reader and nothing else: the entries it carried and every NAF-owned
-record stay untouched, and no volume is ever removed with it.
+from the reader, and the reader cascades that deletion to every entry the feed
+carried, so the feed's entries are deleted with it. NAF-owned records live
+outside the reader and stay untouched, and no volume is ever removed. Pausing
+is the non-destructive alternative: `PATCH /feeds/{id}` with `disabled: true`
+stops the polling and keeps the entries and their read state.
 
 Every reader object is projected onto a shape this project defines before it
 leaves the API. The feed list, the feed health report, the single-feed write,
 and the entry list each expose the fields documented in `README.md`, never the
 reader's own internals such as its scraping rules, the credentials of an
-authenticated feed, or its icon.
+authenticated feed, or its icon. The entry list accepts a repeated `tags`
+parameter, forwarded to the reader in that form and combined with AND, so an
+entry must carry every requested tag and each added tag narrows the result.
 
 The OPML export is the exception, and it is deliberate: it is the reader's own
 document, built to be re-imported, and it carries the subscription settings the
@@ -175,10 +186,12 @@ outside the document and in separate fields.
 Every ingestion pass is recorded in `ingestion_runs`: when it started, when it
 finished, whether it succeeded or a feed failed, how many entries it saw, and
 which feeds failed with which error. The run identifier is returned by
-`POST /collect` and carried in the structured logs. A run is a record of the
-pass, never a precondition for it: a storage problem is logged and the pass
-continues. The run is closed on every exit, including the paths that raise, so
-no row is ever left running by a pass that never finished.
+`POST /collect` and carried in the structured logs, and the recorded history is
+read back through `GET /api/v1/ingestion-runs` (paginated, with an optional
+`status` filter) and `GET /api/v1/ingestion-runs/{run_id}`. A run is a record
+of the pass, never a precondition for it: a storage problem is logged and the
+pass continues. The run is closed on every exit, including the paths that
+raise, so no row is ever left running by a pass that never finished.
 
 ## Feed intake and validation
 

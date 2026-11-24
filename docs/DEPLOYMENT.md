@@ -5,7 +5,7 @@
 | **Project** | naf — Categorized feed aggregator with audio reports |
 | **Version** | Unreleased |
 | **Created** | 2026-10-18 |
-| **Updated** | 2026-10-18 13:00 |
+| **Updated** | 2026-11-24 |
 | **Author** | Alfonso de la Guarda Reyes |
 | **Location** | `docs/DEPLOYMENT.md` |
 
@@ -46,6 +46,37 @@ reverse proxy resolve them by DNS name; renaming breaks the deployment.
   `X-Auth-Token` header. Communication is API-only. In development the URL
   points at the `miniflux` service of the compose stack.
 - Neither database is exposed outside the internal network.
+
+## Reader polling cadence
+
+Polling follows decision 4: a feed is polled every 15 to 30 minutes. The
+development stack declares the interval, the scheduler, and the batch instead
+of relying on the reader's own defaults:
+
+| Variable | Value | Meaning |
+| --- | --- | --- |
+| `NAF_MINIFLUX_POLLING_FREQUENCY` | `20` | Minutes between polls of one feed |
+| `NAF_MINIFLUX_POLLING_SCHEDULER` | `round_robin` | Scheduler that hands due feeds to the poller |
+| `NAF_MINIFLUX_BATCH_SIZE` | `50` | Feeds refreshed per scheduler pass |
+
+`round_robin` spreads the pack across cycles without starving a low-frequency
+source, and 50 leaves headroom over the 8-30 feed pack, so a pass never
+truncates it. The reader still honours `Cache-Control`, `ETag`, and
+`Last-Modified`, so polling every 20 minutes costs no full download of a feed
+that did not change. Every `env.*` file carries the same three values, and the
+compose file declares the same numbers as its defaults.
+
+Verification, once the stack is up:
+
+- `GET /api/v1/feeds` exposes `checked_at` per feed. It must move forward
+  within one interval plus the reader's own run time; a feed that stays at the
+  same instant is not being polled.
+- The reader's own `GET /v1/feeds`, called with the API token, also carries
+  `next_check_at`, the instant the scheduler planned for that feed. The NAF
+  projection does not expose it, so read it from the reader when the schedule
+  itself is in question.
+- `GET /api/v1/feeds/health` reports the freshness and the parsing errors of
+  every feed, which is where a poll that keeps failing becomes visible.
 
 ## Exposure boundary
 
