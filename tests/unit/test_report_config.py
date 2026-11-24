@@ -22,10 +22,10 @@ def test_the_generator_has_a_bounded_default_configuration() -> None:
 
     assert settings.llm_base_url == "https://api.openai.com/v1"
     assert settings.llm_model == ""
-    assert settings.llm_timeout > 0
-    assert 256 <= settings.llm_max_output_tokens <= 32000
-    assert 1 <= settings.report_max_entries <= 500
-    assert 1 <= settings.report_default_days <= 90
+    assert settings.llm_timeout == 120.0
+    assert settings.llm_max_output_tokens == 6000
+    assert settings.report_max_entries == 40
+    assert settings.report_default_days == 7
 
 
 def test_the_generator_reads_the_provider_settings_from_the_environment(monkeypatch) -> None:
