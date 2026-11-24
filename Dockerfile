@@ -14,10 +14,10 @@ WORKDIR /build
 
 # Dependencies first so the layer cache survives source-only changes.
 COPY pyproject.toml uv.lock README.md ./
-RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev --no-install-project
+RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev --no-install-project --extra tts
 
 COPY src/ src/
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --frozen --no-dev --no-editable --extra tts
 
 # --- Stage 2: runtime ---
 FROM python:3.13-slim AS runtime

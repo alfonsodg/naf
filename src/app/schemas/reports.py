@@ -76,6 +76,26 @@ class ReportStory(BaseModel):
         return 0 if value is None else value
 
 
+class AudioAssetView(BaseModel):
+    """One stored audio asset, as the report projection lists it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    asset_id: int = Field(validation_alias="id", description="Identifier the asset is stored under")
+    filename: str = Field(description="Dedicated WAV file name")
+    duration_seconds: float | None = Field(default=None, description="Playback duration of the file")
+    size_bytes: int | None = Field(default=None, description="Size of the stored file")
+    provider: str | None = Field(default=None, description="Speech engine that produced the audio")
+    voice: str | None = Field(default=None, description="Voice identifier used for synthesis")
+    created_at: datetime | None = Field(default=None, description="When the asset was stored, in UTC")
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _instant(cls, value: Any) -> Any:
+        """Serve the stored instant as UTC-aware ISO-8601."""
+        return _utc(value) if isinstance(value, datetime) else value
+
+
 class ReportSummary(BaseModel):
     """One stored edition without its stories, as the history lists it."""
 
@@ -127,9 +147,20 @@ class ReportSummary(BaseModel):
 
 
 class ReportDetail(ReportSummary):
-    """One stored edition with its stories, claims, and citations."""
+    """One stored edition with its stories, claims, citations, and audio assets."""
 
     stories: list[ReportStory] = Field(default_factory=list, description="Stories of the edition, in order")
+    audio: list[AudioAssetView] = Field(
+        default_factory=list,
+        validation_alias="audio_assets",
+        description="Audio assets stored for the edition",
+    )
+
+    @field_validator("audio", mode="before")
+    @classmethod
+    def _assets(cls, value: Any) -> Any:
+        """Read a relationship left empty as an empty list."""
+        return value or []
 
 
 class ReportPagination(BaseModel):
@@ -158,6 +189,12 @@ class ReportDetailResponse(BaseModel):
     """One edition with its stories wrapped in the single-resource envelope."""
 
     data: ReportDetail
+
+
+class AudioAssetResponse(BaseModel):
+    """One audio asset wrapped in the single-resource envelope."""
+
+    data: AudioAssetView
 
 
 def _utc(value: datetime) -> datetime:

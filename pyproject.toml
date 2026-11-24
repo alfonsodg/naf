@@ -37,6 +37,11 @@ dev = [
 audio = [
     "podcastfy>=0.4.3",
 ]
+# Local Spanish speech synthesis: the runtime image installs this extra and the
+# model files are mounted read-only; without them the audio routes answer 503.
+tts = [
+    "kokoro-onnx>=0.4.9",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/app"]
@@ -85,6 +90,11 @@ explicit_package_bases = true
 module = ["alembic.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# Optional speech engine; the package is only present with the tts extra.
+module = ["kokoro_onnx.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
@@ -101,4 +111,11 @@ exclude_dirs = ["tests", "src/app/db/migrations"]
 dev = [
     "types-aiofiles>=25.1.0.20260518",
     "types-defusedxml>=0.7.0.20240218",
+]
+
+[tool.uv]
+# The two speech engines are alternatives, not companions: Podcastfy pins
+# numpy<2 while Kokoro needs numpy>=2, so a deployment installs one or the other.
+conflicts = [
+    [{ extra = "audio" }, { extra = "tts" }],
 ]

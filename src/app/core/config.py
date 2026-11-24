@@ -122,9 +122,25 @@ class Settings(BaseSettings):
 
     # TTS adapter
     tts_provider: str = "podcastfy"
-    tts_voice: str = ""
+    tts_model_path: str = Field(
+        default="",
+        description="Kokoro ONNX model file; empty disables speech synthesis",
+    )
+    tts_voices_path: str = Field(
+        default="",
+        description="Kokoro voices bundle; empty disables speech synthesis",
+    )
+    tts_voice: str = Field(
+        default="ef_dora",
+        description="Spanish voice identifier bundled in the voices file",
+    )
     tts_language: str = "es-ES"
-    tts_speed: float = 1.0
+    tts_speed: float = Field(
+        default=1.0,
+        ge=1.0,
+        le=2.0,
+        description="Speech rate multiplier applied to every segment",
+    )
 
     # Audio storage
     audio_storage_path: str = "./storage/audio"

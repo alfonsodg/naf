@@ -2,6 +2,9 @@
 
 from typing import Any
 
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 
@@ -41,3 +44,25 @@ def test_the_generator_reads_the_provider_settings_from_the_environment(monkeypa
     assert settings.llm_model == "report-model"
     assert settings.llm_max_output_tokens == 1200
     assert settings.report_max_entries == 40
+
+
+def test_the_speech_engine_has_a_documented_default_configuration() -> None:
+    """The audio routes start disabled until a model and voices file are configured."""
+    settings = _settings()
+
+    assert settings.tts_model_path == ""
+    assert settings.tts_voices_path == ""
+    assert settings.tts_voice == "ef_dora"
+    assert settings.tts_language == "es-ES"
+    assert settings.tts_speed == 1.0
+
+
+def test_the_speech_speed_is_bounded(monkeypatch) -> None:
+    """A deployment can speed the voice up but never outside the documented range."""
+    monkeypatch.setenv("NAF_TTS_SPEED", "1.5")
+
+    assert _settings().tts_speed == 1.5
+
+    monkeypatch.setenv("NAF_TTS_SPEED", "3.0")
+    with pytest.raises(ValidationError):
+        _settings()
