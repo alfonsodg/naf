@@ -135,14 +135,14 @@ class FakeTTS:
         self.error: Exception | None = None
 
     async def synthesize_segment(self, text: str, config: TTSConfig) -> AudioSegment:
-        """Synthesize one segment with deterministic PCM."""
+        """Synthesize one segment or raise the configured failure."""
+        if self.error is not None:
+            raise self.error
         return self._segments([text])[0]
 
     async def synthesize_batch(self, texts: list[str], config: TTSConfig) -> list[AudioSegment]:
-        """Synthesize every text or raise the configured failure."""
-        if self.error is not None:
-            raise self.error
-        return self._segments(texts)
+        """Synthesize every text through the single-segment path."""
+        return [await self.synthesize_segment(text, config) for text in texts]
 
     def supports_segmentation(self) -> bool:
         """Declare that the caller owns the segmentation."""
