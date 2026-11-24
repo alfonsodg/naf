@@ -88,3 +88,17 @@ def test_a_mapped_ipv4_address_is_refused(address: str) -> None:
         select_public_address("host.test", [address])
 
     assert address in str(excinfo.value)
+
+
+def test_a_dual_stack_host_pins_its_ipv4_address() -> None:
+    """IPv6 sorts first as text, but an IPv4-only network cannot reach it."""
+    addresses = ["2001:19f0:5c00:2ea4:5400:6ff:fee0:26fd", "64.177.113.22"]
+
+    assert select_public_address("host.test", addresses) == "64.177.113.22"
+
+
+def test_an_ipv6_only_host_keeps_its_ipv6_address() -> None:
+    """A host with no IPv4 record is still reachable over IPv6."""
+    address = "2606:4700:4700::1111"
+
+    assert select_public_address("host.test", [address]) == address
