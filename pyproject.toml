@@ -36,9 +36,6 @@ dev = [
     "mypy>=1.13.0",
     "bandit>=1.8.0",
 ]
-audio = [
-    "podcastfy>=0.4.3",
-]
 # Local Spanish speech synthesis: the runtime image installs this extra and the
 # model files are mounted read-only; without them the audio routes answer 503.
 tts = [

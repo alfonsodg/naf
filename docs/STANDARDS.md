@@ -22,13 +22,10 @@ enforced by configuration or by a test, not by convention alone.
 ## Package manager and dependencies
 
 - Dependencies are declared in `pyproject.toml`; `uv.lock` is committed.
-- Runtime, development, and optional (`audio`) groups are separated.
+- Runtime, development, and optional (`tts`) groups are separated.
 - `uv sync --extra dev` reproduces the development environment.
-- `uv audit` runs in CI over the default and `dev` groups. Known advisories are
-  triaged in an issue; advisories reachable only through the optional `audio`
-  extra do not block the runtime image, which never installs it.
-- `pytest` is pinned below 9.0 because `podcastfy` (the `audio` extra) requires
-  `pytest>=8.3.3,<9.0.0`. This is a hard upstream constraint, not a choice.
+- `uv audit` runs in CI over the runtime and development groups. A known advisory
+  is triaged in an issue and never ignored silently.
 
 ## Licence policy
 
