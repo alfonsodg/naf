@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Alfonso technical radar feed pack (2026-11-24)</title>
+  </head>
+  <body>
+    <outline text="AI/models" title="AI/models">
+      <outline text="AI research" title="AI research">
+        <outline type="rss" text="arXiv cs.AI" title="arXiv cs.AI" xmlUrl="https://rss.arxiv.org/rss/cs.AI" htmlUrl="https://arxiv.org"/>
+      </outline>
+      <outline text="AI industry" title="AI industry">
+        <outline type="rss" text="SemiAnalysis" title="SemiAnalysis" xmlUrl="https://semianalysis.com/feed/" htmlUrl="https://semianalysis.com"/>
+      </outline>
+      <outline text="AI open source" title="AI open source">
+        <outline type="rss" text="Hugging Face Blog" title="Hugging Face Blog" xmlUrl="https://huggingface.co/blog/feed.xml" htmlUrl="https://huggingface.co/blog"/>
+      </outline>
+    </outline>
+    <outline text="Technology and software" title="Technology and software">
+      <outline text="General tech" title="General tech">
+        <outline type="rss" text="Hacker News" title="Hacker News" xmlUrl="https://news.ycombinator.com/rss" htmlUrl="https://news.ycombinator.com"/>
+        <outline type="rss" text="Lobsters" title="Lobsters" xmlUrl="https://lobste.rs/rss" htmlUrl="https://lobste.rs"/>
+        <outline type="rss" text="Techmeme" title="Techmeme" xmlUrl="https://www.techmeme.com/feed.xml" htmlUrl="https://www.techmeme.com"/>
+      </outline>
+      <outline text="Engineering" title="Engineering">
+        <outline type="rss" text="IEEE Spectrum" title="IEEE Spectrum" xmlUrl="https://spectrum.ieee.org/feeds/feed.rss" htmlUrl="https://spectrum.ieee.org"/>
+      </outline>
+      <outline text="Hardware" title="Hardware">
+        <outline type="rss" text="Phoronix" title="Phoronix" xmlUrl="https://www.phoronix.com/rss.php" htmlUrl="https://www.phoronix.com"/>
+      </outline>
+      <outline text="Servers" title="Servers">
+        <outline type="rss" text="ServeTheHome" title="ServeTheHome" xmlUrl="https://www.servethehome.com/feed/" htmlUrl="https://www.servethehome.com"/>
+      </outline>
+      <outline text="Datacenter" title="Datacenter">
+        <outline type="rss" text="Data Center Dynamics" title="Data Center Dynamics" xmlUrl="https://www.datacenterdynamics.com/en/rss/" htmlUrl="https://www.datacenterdynamics.com"/>
+      </outline>
+      <outline text="Crypto protocol" title="Crypto protocol">
+        <outline type="rss" text="Ethereum Foundation Blog" title="Ethereum Foundation Blog" xmlUrl="https://blog.ethereum.org/feed.xml" htmlUrl="https://blog.ethereum.org"/>
+      </outline>
+      <outline text="Crypto engineering" title="Crypto engineering">
+        <outline type="rss" text="Bitcoin Optech" title="Bitcoin Optech" xmlUrl="https://bitcoinops.org/feed.xml" htmlUrl="https://bitcoinops.org"/>
+      </outline>
+      <outline text="Games" title="Games">
+        <outline type="rss" text="Game Developer" title="Game Developer" xmlUrl="https://www.gamedeveloper.com/rss.xml" htmlUrl="https://www.gamedeveloper.com"/>
+      </outline>
+      <outline text="Wearables" title="Wearables">
+        <outline type="rss" text="DC Rainmaker" title="DC Rainmaker" xmlUrl="https://www.dcrainmaker.com/feed" htmlUrl="https://www.dcrainmaker.com"/>
+      </outline>
+      <outline text="Enterprise" title="Enterprise">
+        <outline type="rss" text="The Register" title="The Register" xmlUrl="https://www.theregister.com/headlines.atom" htmlUrl="https://www.theregister.com"/>
+      </outline>
+    </outline>
+    <outline text="Politics, regulation, and security" title="Politics, regulation, and security">
+      <outline text="Security" title="Security">
+        <outline type="rss" text="BleepingComputer" title="BleepingComputer" xmlUrl="https://www.bleepingcomputer.com/feed/" htmlUrl="https://www.bleepingcomputer.com"/>
+        <outline type="rss" text="Krebs on Security" title="Krebs on Security" xmlUrl="https://krebsonsecurity.com/feed/" htmlUrl="https://krebsonsecurity.com"/>
+      </outline>
+      <outline text="Crypto" title="Crypto">
+        <outline type="rss" text="CoinDesk" title="CoinDesk" xmlUrl="https://www.coindesk.com/arc/outboundfeeds/rss/" htmlUrl="https://www.coindesk.com"/>
+      </outline>
+    </outline>
+  </body>
+</opml>
