@@ -123,7 +123,7 @@ services:
   # a private network replaces it.
   proxy:
     image: nginx:1.27-alpine
-    depends_on: naf
+    depends_on: [naf]
     volumes:
       # Relative paths resolve from this file's directory, so ../proxy is
       # deploy/proxy. The config is included by the stock nginx.conf inside
