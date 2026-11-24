@@ -165,6 +165,7 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/reports/{report_id}` | One report with its stories and citations |
 | `GET` | `/api/v1/ingestion-runs` | List recorded passes with an optional status filter |
 | `GET` | `/api/v1/ingestion-runs/{run_id}` | Read one recorded pass with its per-feed errors |
+| `GET` | `/api/v1/metrics` | Pilot snapshot of sources, ingestion, reports, and audio |
 
 `POST /api/v1/feeds/intake` takes either a text body with one feed URL per line
 or an OPML document, validates every candidate over HTTP, and returns one report
@@ -235,6 +236,15 @@ ones. `GET /api/v1/ingestion-runs/{run_id}` returns one pass with its
 unknown identifier answers 404 with the `INGESTION_RUN_NOT_FOUND` envelope. A
 run still in `running` is served as recorded, with `finished_at` absent, so an
 open pass is never read as a failure.
+
+`GET /api/v1/metrics?days=7` builds the pilot snapshot for a window of 1–90 days
+from the same NAF-owned rows plus the reader's feed list. The `sources` block
+reports freshness and parsing state (a paused feed is counted but never read as
+stale), `ingestion` aggregates the recorded passes, `reports` counts the stored
+editions by status and measures their size and p50/p95 wall time, and `audio`
+sums the assets. A reader failure leaves only `sources.available` false; the
+other blocks still answer. The pilot that consumes this snapshot is
+`docs/PILOT_PLAN.md`.
 
 `GET /api/v1/feeds` and `GET /api/v1/feeds/health` return the same projected
 shape: the identifier, the title, the feed and site addresses, the category,
@@ -307,6 +317,7 @@ leaking the provider detail. There is no framework and no build step.
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.
 - `docs/DEPLOYMENT.md` — topology, volumes, migrations, health, and rollback.
 - `docs/PRODUCT_PLAN.md` — product specification, scope, and phased delivery plan.
+- `docs/PILOT_PLAN.md` — Phase 6 cohort, readings, security, and go/no-go rules.
 - `feeds/README.md` — curated feed pack, taxonomy, and import.
 - `CHANGELOG.md` — change history.
 - `REMOTE.md` — local-only operational inventory (never tracked).
