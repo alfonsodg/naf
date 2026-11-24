@@ -9,6 +9,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Entry classification and model tracking: `POST /api/v1/entries/{id}/classify`
+  stores a topic, tags, publication type, officiality, confidence, and the
+  models the entry names with a literal evidence quote; `PATCH` records the
+  user's correction and a later automatic pass never overwrites it, and
+  `GET /classifications?review_needed=true` lists what the model could not
+  place.
 - Auth proxy in the compose stack: a tracked nginx service
   (`deploy/proxy/nginx.conf`, `nginx:1.27-alpine`) terminates HTTP Basic auth
   and forwards to `http://naf:8000`, while the API keeps its loopback

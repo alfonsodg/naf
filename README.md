@@ -290,6 +290,20 @@ returns the file, and the report detail lists its duration, size, provider, and
 voice. A second request returns the stored asset unless `force=true`; a
 synthesis failure leaves the text edition intact and answers `502`.
 
+## Classification and model tracking
+
+`POST /api/v1/entries/{id}/classify` asks the configured model for a topic,
+tags, publication type, and whether the entry is the creator's own announcement.
+The answer is stored as an automatic suggestion, with a confidence, an explicit
+uncertainty flag, and the models the entry names: name, creator, whether it is a
+new model or an update, and a literal evidence quote. A quote that is not a
+fragment of the entry is discarded.
+
+`PATCH /api/v1/entries/{id}/classification` records the user's correction and
+marks the row as `source=user`; a later automatic pass returns it unchanged.
+`GET /classifications?review_needed=true` lists what the model could not place,
+so nothing is force-fitted into a category.
+
 ## Web interface
 
 The same process renders the complementary screens the product plan requires
