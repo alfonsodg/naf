@@ -55,6 +55,28 @@ def test_the_speech_engine_has_a_documented_default_configuration() -> None:
     assert settings.tts_voice == "ef_dora"
     assert settings.tts_language == "es-ES"
     assert settings.tts_speed == 1.0
+    assert settings.tts_segment_retries == 2
+    assert settings.tts_segment_retry_delay == 0.5
+
+
+def test_the_segment_retries_and_delay_are_bounded(monkeypatch) -> None:
+    """A deployment can retry a segment more or wait less, never without a bound."""
+    monkeypatch.setenv("NAF_TTS_SEGMENT_RETRIES", "4")
+    monkeypatch.setenv("NAF_TTS_SEGMENT_RETRY_DELAY", "0.25")
+
+    settings = _settings()
+
+    assert settings.tts_segment_retries == 4
+    assert settings.tts_segment_retry_delay == 0.25
+
+    monkeypatch.setenv("NAF_TTS_SEGMENT_RETRIES", "6")
+    with pytest.raises(ValidationError):
+        _settings()
+
+    monkeypatch.setenv("NAF_TTS_SEGMENT_RETRIES", "2")
+    monkeypatch.setenv("NAF_TTS_SEGMENT_RETRY_DELAY", "0")
+    with pytest.raises(ValidationError):
+        _settings()
 
 
 def test_the_speech_speed_is_bounded(monkeypatch) -> None:

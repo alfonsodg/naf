@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -29,6 +30,7 @@ class AudioAsset(Base):
     provider = Column(String(100))
     voice = Column(String(100))
     version = Column(String(50), default="1.0")
+    segments = Column(JSON, default=[])
     is_immutable = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
