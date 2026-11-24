@@ -243,6 +243,13 @@ twice unless asked.
   `NAF_LLM_API_KEY`, and `NAF_LLM_MODEL`. Without a model the routes answer
   `503 REPORT_GENERATOR_NOT_CONFIGURED` and the history stays readable.
 
+`POST /api/v1/reports/{report_id}/audio` synthesizes the stored edition with
+Kokoro ONNX and a Spanish voice, concatenates the segments into one mono 24 kHz
+WAV, and stores it as an immutable asset. `GET /api/v1/reports/{report_id}/audio`
+returns the file, and the report detail lists its duration, size, provider, and
+voice. A second request returns the stored asset unless `force=true`; a
+synthesis failure leaves the text edition intact and answers `502`.
+
 ## Documentation
 
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.

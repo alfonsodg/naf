@@ -9,6 +9,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Report audio: `POST /api/v1/reports/{report_id}/audio` synthesizes the stored
+  edition with Kokoro ONNX and a Spanish voice, segments the script by sentence,
+  concatenates one mono 24 kHz WAV, and keeps it as an immutable asset that
+  `GET /reports/{id}/audio` serves. The report detail lists the asset, a second
+  request reuses it, and a synthesis failure leaves the text untouched.
 - On-demand text reports: `POST /api/v1/reports` selects entries by period,
   feeds, categories, tags, search, read/starred state, or the saved cursor,
   writes a Spanish report with a citation for every claim, and stores the
