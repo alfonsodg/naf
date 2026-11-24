@@ -7,7 +7,12 @@ from app.schemas.classification import Classification
 
 
 class Classifier(ABC):
-    """Assign categories and tags to reader items."""
+    """Assign categories, tags, and evidence-backed model mentions to reader items."""
+
+    @property
+    def model(self) -> str:
+        """Identify the model behind the classifier; empty when it does not apply."""
+        return ""
 
     @abstractmethod
     async def classify(self, item: dict[str, Any]) -> Classification:

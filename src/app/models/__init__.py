@@ -1,4 +1,5 @@
 from .audio import AudioAsset
+from .classification import EntryClassification, EntryModelMention
 from .digest import Digest, DigestStory
 from .entities import Creator, ModelEntity
 from .feed_folders import FeedFolder
@@ -9,6 +10,8 @@ __all__ = [
     "Creator",
     "Digest",
     "DigestStory",
+    "EntryClassification",
+    "EntryModelMention",
     "FeedFolder",
     "IngestionRun",
     "ModelEntity",
