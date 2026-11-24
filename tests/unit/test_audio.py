@@ -222,3 +222,12 @@ def test_a_synthesis_failure_leaves_the_text_report_available(
     detail = client.get(f"/api/v1/reports/{digest.id}")
     assert detail.status_code == 200
     assert detail.json()["data"]["audio"] == []
+
+
+def test_the_audio_routes_are_published() -> None:
+    """Both audio routes exist in the OpenAPI contract of the service."""
+    paths = client.get("/openapi.json").json()["paths"]
+    audio_path = "/api/v1/reports/{report_id}/audio"
+
+    assert "post" in paths[audio_path]
+    assert "get" in paths[audio_path]

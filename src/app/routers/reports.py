@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy.orm import Session
 
 from app.adapters.miniflux.client import MinifluxClient
-from app.adapters.storage.local import LocalAudioStorage
+from app.adapters.storage.local import LocalAudioStorage  # type: ignore[import-untyped]
 from app.core.config import settings as app_settings
 from app.core.exceptions import CitationValidationError, MinifluxAPIError, ReportGenerationError, TTSError
 from app.core.ports.feed_reader import FeedReader
@@ -79,7 +79,7 @@ def _tts() -> TTSProvider:
 
 def _audio_storage() -> AudioStorage:
     """Build the local audio storage adapter for one request."""
-    return LocalAudioStorage()
+    return cast(AudioStorage, LocalAudioStorage())
 
 
 @router.post("/reports", status_code=201)
