@@ -403,11 +403,15 @@ def test_reader_failure_translates_to_502(method: str, route: str, payload: dict
 
 
 def test_a_feed_is_deleted_from_the_reader() -> None:
-    """DELETE /feeds/{id} removes the subscription and says so."""
+    """DELETE /feeds/{id} removes the subscription and states the entry cascade."""
     response = client.delete("/api/v1/feeds/12")
 
     assert response.status_code == 200
-    assert response.json()["data"] == {"feed_id": 12, "removed": True}
+    body = response.json()["data"]
+    assert body["feed_id"] == 12
+    assert body["removed"] is True
+    assert "cascade" in body["warning"]
+    assert "entry" in body["warning"]
     assert state.deleted == [12]
 
 

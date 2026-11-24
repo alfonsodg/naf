@@ -135,8 +135,10 @@ async def refresh_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
 async def delete_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
     """Remove one subscription from the reader.
 
-    Only the subscription is removed. The entries it carried and every
-    NAF-owned record stay untouched.
+    The reader declares ``entries.feed_id`` as a foreign key with
+    ``on delete cascade``, so deleting a feed also deletes every entry that
+    feed carried. NAF-owned records live outside the reader and stay untouched,
+    and no volume is affected.
     """
     try:
         removed = await _client().delete_feed(feed_id)
@@ -147,7 +149,13 @@ async def delete_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
                 detail=error_body("FEED_NOT_FOUND", "the reader does not have that subscription"),
             ) from exc
         raise _unavailable(exc) from exc
-    return {"data": {"feed_id": feed_id, "removed": removed}}
+    return {
+        "data": {
+            "feed_id": feed_id,
+            "removed": removed,
+            "warning": "the reader cascades this deletion to every entry the feed carried",
+        }
+    }
 
 
 @router.get("/categories")
