@@ -9,6 +9,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Auth proxy in the compose stack: a tracked nginx service
+  (`deploy/proxy/nginx.conf`, `nginx:1.27-alpine`) terminates HTTP Basic auth
+  and forwards to `http://naf:8000`, while the API keeps its loopback
+  publication. `/health` stays unauthenticated for the healthcheck; the
+  password file is a deployment artefact and is never committed.
+- Reader retention: the stack declares decision 8's window instead of the
+  reader's inherited defaults — 90 days after an entry is read, 180 for unread
+  entries, cleanup once a day — and the deployment reference states what the
+  reader deletes, what NAF keeps of a citation, and what happens when the cited
+  entry has been archived.
 - Web interface: the same FastAPI service renders a Spanish screen to create a
   report, read its stories with every citation linked to the original URL,
   play the stored audio, and follow the synchronized transcript by segment.

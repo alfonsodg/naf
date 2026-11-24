@@ -64,6 +64,13 @@ htmlcov/
 *.db
 *.sqlite3
 
+# Proxy credentials (deployment-only, never committed)
+deploy/proxy/htpasswd
+deploy/proxy/password
+# Legacy layout still present on the Sandbox host until the deployment moves
+/proxy/htpasswd
+/proxy/password
+
 # Editors / OS
 .vscode/
 .idea/

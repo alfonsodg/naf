@@ -69,6 +69,16 @@ The reader's polling is declared with the rest: 20 minutes between polls
 (`NAF_MINIFLUX_BATCH_SIZE`). `docs/DEPLOYMENT.md` records that cadence and how
 to verify it through `checked_at` and `next_check_at`.
 
+Retention is declared too (decision 8): `NAF_MINIFLUX_CLEANUP_READ_DAYS=90`,
+`NAF_MINIFLUX_CLEANUP_UNREAD_DAYS=180`, and
+`NAF_MINIFLUX_CLEANUP_FREQUENCY=24` replace the reader's inherited cleanup.
+A read entry stays a quarter before it is archived; an unread one gets six
+months so it can still be read. NAF keeps, per cited story, the entry id, URL,
+title, and author captured with the report and never a copy of the body, so a
+citation remains identifiable after the reader archives its entry.
+`docs/DEPLOYMENT.md` states the window, what the reader deletes, and what
+happens to a citation whose entry was archived.
+
 ## Container image
 
 The runtime image is published to GHCR by `.github/workflows/container.yml`.
@@ -92,6 +102,26 @@ docker compose --env-file deploy.env -f deploy/compose/docker-compose.yml up -d
 `deploy.env` supplies `NAF_IMAGE=ghcr.io/alfonsodg/naf:<tag>` and the required
 variables. The stack forwards only the settings listed in
 `docs/DEPLOYMENT.md`; anything else stays at the application default.
+
+## Public surface
+
+The API has no authentication of its own, so the stack publishes it only
+through `proxy`, an nginx container that terminates HTTP Basic authentication
+and forwards to `http://naf:8000` on the compose network. The `naf` service
+keeps its loopback publication (`127.0.0.1:${NAF_PORT}:8000`); the proxy is the
+only public surface. `deploy/proxy/nginx.conf` is tracked, the password file is
+not, and a deployment keeps it outside the repository.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NAF_PROXY_PORT` | `18082` | Host port that publishes the proxy |
+| `NAF_PROXY_HTPASSWD` | `../proxy/htpasswd` | Host path of the password file, mounted read-only |
+
+`/health` is the only unauthenticated path, because it is the liveness probe
+and carries no data; every other path answers `401` without credentials. Plain
+HTTP sends the password in clear, which is acceptable only on a test host until
+TLS or a private network replaces it. `docs/DEPLOYMENT.md` records the
+procedure and the file modes.
 
 ## Quality checks
 
