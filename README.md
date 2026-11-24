@@ -5,7 +5,7 @@
 | **Project** | naf — Categorized feed aggregator with audio reports |
 | **Version** | Unreleased |
 | **Created** | 2026-10-18 |
-| **Updated** | 2026-10-18 13:00 |
+| **Updated** | 2026-11-24 |
 | **Author** | Alfonso de la Guarda Reyes |
 | **Location** | `README.md` |
 
@@ -57,6 +57,18 @@ Then open <http://localhost:8000/docs>. Required configuration has no
 defaults: startup fails when a value is missing rather than falling back
 silently.
 
+## Configuration
+
+`src/app/core/config.py` holds the typed settings, read from the environment
+with the `NAF_` prefix. `env.dev`, `env.qa`, `env.rev`, `env.prod`, and the
+`samples/.env.example` template document every variable.
+
+The reader's polling is declared with the rest: 20 minutes between polls
+(`NAF_MINIFLUX_POLLING_FREQUENCY`), the `round_robin` scheduler
+(`NAF_MINIFLUX_POLLING_SCHEDULER`), and 50 feeds per scheduler pass
+(`NAF_MINIFLUX_BATCH_SIZE`). `docs/DEPLOYMENT.md` records that cadence and how
+to verify it through `checked_at` and `next_check_at`.
+
 ## Quality checks
 
 ```bash
@@ -84,16 +96,18 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/feeds/folders` | Folders found for the feeds, besides the applied category |
 | `POST` | `/api/v1/feeds` | Validate and add one feed, optionally into a category |
 | `PATCH` | `/api/v1/feeds/{id}` | Rename, move to another category, or pause a feed |
-| `DELETE` | `/api/v1/feeds/{id}` | Remove one subscription from the reader |
+| `DELETE` | `/api/v1/feeds/{id}` | Remove one subscription and, with it, its entries |
 | `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
 | `POST` | `/api/v1/feeds/intake` | Validate and add feeds from a URL list or an OPML export |
 | `GET` | `/api/v1/categories` | List reader categories |
-| `GET` | `/api/v1/entries` | List entries with filters, publication period, and pagination |
+| `GET` | `/api/v1/entries` | List entries with filters, tags, publication period, and pagination |
 | `GET` | `/api/v1/entries/{id}` | Read one entry with its attachments and tags |
 | `PATCH` | `/api/v1/entries/{id}` | Set read or unread status |
 | `GET` | `/api/v1/opml/export` | Export subscriptions as OPML |
 | `POST` | `/api/v1/opml/import` | Deprecated: stores the OPML without validating its feeds |
-| `POST` | `/api/v1/collect` | Run one ingestion pass |
+| `POST` | `/api/v1/collect` | Run one pass, optionally from a publication cutoff |
+| `GET` | `/api/v1/ingestion-runs` | List recorded passes with an optional status filter |
+| `GET` | `/api/v1/ingestion-runs/{run_id}` | Read one recorded pass with its per-feed errors |
 
 `POST /api/v1/feeds/intake` takes either a text body with one feed URL per line
 or an OPML document, validates every candidate over HTTP, and returns one report
@@ -112,18 +126,58 @@ folders that were only found in the source document. The reader holds one
 category per feed, so the extra folders are kept in the NAF database and can be
 read from `GET /api/v1/feeds/folders`.
 
+The repository ships a curated pack in `feeds/alfonso-articles.opml`: 18
+validated feeds whose approved taxonomy is already in the outline trail, so the
+import applies the organisation instead of adding flat subscriptions.
+`feeds/README.md` records the taxonomy, the feed mapping, and the validation of
+every feed. Import it with the intake route:
+
+```bash
+curl -X POST "$NAF_BASE_URL/api/v1/feeds/intake" \
+  -H 'Content-Type: application/xml' \
+  --data-binary @feeds/alfonso-articles.opml
+```
+
 `GET /api/v1/entries` accepts `published_after` and `published_before` as
 ISO-8601 timestamps, which are read as UTC when they carry no zone and
 combine with the other filters. The period is the basis for the reports that
 cover "this week" or "since the last one".
 
-Every entry carries the attachments and the tags the feed provided, so an
-audio enclosure is never lost on the way to a report.
+The same route accepts `tags` as a repeated parameter, one tag per occurrence.
+The reader combines them with AND, so every added tag narrows the list and an
+entry must carry all of them; a request without `tags` applies no tag filter.
+Send `?tags=security&tags=ai` to read the entries tagged with both.
+
+Every entry is projected onto the same shape in the list and in the single
+read: `entry_id`, `guid`, `url`, `title`, `author`, the three dates, `status`,
+`starred`, `content`, `reading_time`, `enclosures`, `tags`, and the feed's
+`feed_id`, `feed_title`, `feed_url`, and `site_url`. The attachments and the
+tags the feed provided are kept, so an audio enclosure is never lost on the
+way to a report.
+
+The three dates are distinct and never interchangeable. `published_at` is the
+date the publisher declares, `created_at` is the date the reader first captured
+the entry, and `changed_at` is the last known modification of the entry in the
+reader. A date the reader does not report is `null` with the key still present,
+so a consumer never has to tell a missing key from a missing value.
 
 `POST /api/v1/collect` runs one ingestion pass with per-feed failure
 isolation, and every pass is recorded in the NAF database as an ingestion run.
 The response names the run, so a feed that starts failing leaves a trace of
-which feed failed, when, and with what error.
+which feed failed, when, and with what error. The optional `since` parameter
+scopes the pass to entries published at or after that instant; a timestamp
+without a zone is read as UTC, and an entry with no publication date is kept,
+because an undated entry is never dropped. Pass the cutoff of the last report
+to collect only what arrived after it.
+
+The recorded history is readable through `GET /api/v1/ingestion-runs`, newest
+first and paginated, with an optional `status` filter (`running`, `success`, or
+`failed`) that lists the failed passes without reading a page of successful
+ones. `GET /api/v1/ingestion-runs/{run_id}` returns one pass with its
+`entries_count`, its per-feed `errors`, and a readable `error_summary`; an
+unknown identifier answers 404 with the `INGESTION_RUN_NOT_FOUND` envelope. A
+run still in `running` is served as recorded, with `finished_at` absent, so an
+open pass is never read as a failure.
 
 `GET /api/v1/feeds` and `GET /api/v1/feeds/health` return the same projected
 shape: the identifier, the title, the feed and site addresses, the category,
@@ -131,11 +185,21 @@ the last check, the parsing errors, and the paused state. The reader's own
 fields, such as its scraping rules, the credentials of an authenticated feed,
 or its icon, never reach the API.
 
+Deleting a subscription is destructive in the reader, and the response says so.
+`DELETE /api/v1/feeds/{id}` removes the feed, and the reader cascades the
+deletion to every entry that feed carried. NAF-owned records live outside the
+reader and stay untouched, and no volume is affected. To stop following a feed
+without losing its entries and their read state, pause it instead:
+`PATCH /api/v1/feeds/{id}` with `{"disabled": true}` stops the polling and
+keeps everything. The delete answer keeps `feed_id` and `removed` and adds a
+`warning` that names the cascade.
+
 ## Documentation
 
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.
 - `docs/DEPLOYMENT.md` — topology, volumes, migrations, health, and rollback.
 - `docs/PRODUCT_PLAN.md` — product specification, scope, and phased delivery plan.
+- `feeds/README.md` — curated feed pack, taxonomy, and import.
 - `CHANGELOG.md` — change history.
 - `REMOTE.md` — local-only operational inventory (never tracked).
 
