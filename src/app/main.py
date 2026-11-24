@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
-from app.routers import feeds, health
+from app.routers import entries, feeds, health
 
 logger = get_logger(__name__)
 
@@ -31,6 +31,7 @@ app = FastAPI(
 
 app.include_router(health.router, prefix=settings.api_prefix, tags=["health"])
 app.include_router(feeds.router, prefix=settings.api_prefix, tags=["feeds"])
+app.include_router(entries.router, prefix=settings.api_prefix, tags=["entries"])
 
 
 @app.get("/health", tags=["health"])
