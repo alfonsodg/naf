@@ -416,7 +416,9 @@ able to operate with its own pipeline.
 ## 11. Verifiable functional requirements
 
 - **FR-01 Feeds:** the user can add, test, pause, and delete a subscription; view
-  health, last sync, and errors.
+  health, last sync, and errors. Pausing stops updates and keeps the entries the
+  feed carried; deleting removes the subscription and, through the reader's
+  cascade, those entries, so the response states that effect.
 - **FR-02 Portability:** OPML import/export preserves the feed list; failures in
   one source do not block importing or syncing the others.
 - **FR-03 Full capture:** every entry delivered by integrated feeds is shown and
