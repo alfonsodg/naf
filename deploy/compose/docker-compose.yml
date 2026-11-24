@@ -74,6 +74,9 @@ services:
       NAF_MINIFLUX_URL: ${NAF_MINIFLUX_URL:-http://miniflux:8080}
       NAF_MINIFLUX_API_KEY: ${NAF_MINIFLUX_API_KEY:?NAF_MINIFLUX_API_KEY is required}
       NAF_AUDIO_STORAGE_PATH: /data/audio
+      # The cap stays enforced while the body is read; forwarding it lets a
+      # deployment raise it for a large but legitimate feed.
+      NAF_FEED_INTAKE_MAX_BYTES: ${NAF_FEED_INTAKE_MAX_BYTES:-1000000}
     volumes:
       - naf-audio:/data/audio
     ports:

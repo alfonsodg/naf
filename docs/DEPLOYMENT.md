@@ -78,6 +78,19 @@ Verification, once the stack is up:
 - `GET /api/v1/feeds/health` reports the freshness and the parsing errors of
   every feed, which is where a poll that keeps failing becomes visible.
 
+## Runtime settings forwarded by the stack
+
+The compose file forwards a curated set to the `naf` container. A setting that is
+not listed here stays at the application default even when the env file changes
+it, because the container never receives the variable.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NAF_FEED_INTAKE_MAX_BYTES` | `1000000` | Largest feed document accepted during intake; enforced while the body is read |
+
+Raise the cap only for a validated source that publishes more than the default,
+and keep the value bounded: it is a memory limit, not a preference.
+
 ## Database migrations
 
 The runtime image carries `alembic.ini` and the migration scripts under
