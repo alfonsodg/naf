@@ -117,7 +117,8 @@ Capabilities and licenses must be re-verified before adopting a dependency.
 ### Included
 
 - General categorized reader: individual additions and OPML import, categories
-  and collections, read/unread, save/favorites, search, and chronological feed.
+  and collections, read/unread, save/favorites, search, chronological feed, and
+  removing a subscription.
 - Periodic ingestion of every entry and metadata each integrated source provides,
   without restricting topics to AI. If the feed only offers title/excerpt, keep
   that level; full-body extraction depends on the source.

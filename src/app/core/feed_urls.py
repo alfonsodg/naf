@@ -55,9 +55,8 @@ def validate_feed_url(url: str) -> str:
 
     The rules are deliberately strict: only ``http``/``https``, a mandatory
     host, no credentials in the authority, and no loopback, link-local, or
-    metadata target. Resolution is not performed, so a public hostname that
-    resolves internally is caught later, when the redirect target of every hop
-    is re-checked by the validator.
+    metadata target. They read the name only, so the name is resolved
+    separately by :mod:`app.core.resolver` before any connection is made.
     """
     candidate = url.strip()
     if not candidate:
@@ -83,15 +82,3 @@ def validate_feed_url(url: str) -> str:
     _reject_literal_ip(host)
 
     return candidate
-
-
-def is_feed_document(url: str) -> bool:
-    """Report whether a URL looks like a feed document rather than a site.
-
-    Used only to decide whether ``/discover`` is worth calling; it never rejects
-    input.
-    """
-    path = urlsplit(url.strip()).path.lower()
-    return path.endswith((".xml", ".rss", ".atom", ".rdf")) or any(
-        marker in path for marker in ("/feed", "/rss", "/atom")
-    )

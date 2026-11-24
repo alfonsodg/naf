@@ -19,6 +19,7 @@ class FeedVerdict(StrEnum):
     THROTTLED = "throttled"
     TIMEOUT = "timeout"
     BLOCKED = "blocked"
+    NOT_PROCESSED = "not_processed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,5 +49,9 @@ class FeedValidator(ABC):
         """Probe one feed URL and classify the result."""
 
     @abstractmethod
-    async def validate_many(self, urls: list[str]) -> list[FeedProbe]:
-        """Probe several URLs with bounded concurrency, preserving input order."""
+    async def validate_many(self, urls: list[str], timeout: float | None = None) -> list[FeedProbe]:
+        """Probe several URLs with bounded concurrency, preserving input order.
+
+        ``timeout`` caps the time a single probe may take, so a caller can
+        keep a whole batch inside its own budget.
+        """

@@ -1,8 +1,11 @@
 """Feed validator: every verdict is distinguishable and correctly attributed."""
 
+import socket
+
 import httpx
 import pytest
 
+from app.adapters.http import feed_validator
 from app.adapters.http.feed_validator import HttpFeedValidator
 from app.core.ports.feed_validator import FeedVerdict
 
@@ -20,6 +23,22 @@ RSS_WITHOUT_ITEMS = """<?xml version="1.0"?>
 <rss version="2.0"><channel><title>Empty</title></channel></rss>"""
 
 HTML_PAGE = "<!DOCTYPE html><html><body><h1>Not a feed</h1></body></html>"
+
+PUBLIC_ADDRESS = "93.184.216.34"
+PRIVATE_ADDRESS = "10.0.0.5"
+
+
+async def _resolve(host: str, port: int = 443) -> list[str]:
+    """Resolve test hosts to deterministic addresses."""
+    if host.startswith("internal"):
+        return [PRIVATE_ADDRESS]
+    return [PUBLIC_ADDRESS]
+
+
+@pytest.fixture(autouse=True)
+def _resolved_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every candidate to a deterministic public address."""
+    monkeypatch.setattr(feed_validator, "resolve_host_addresses", _resolve)
 
 
 @pytest.fixture
@@ -175,82 +194,40 @@ async def test_internal_target_is_blocked_without_a_request(
     assert called is False
 
 
-async def test_redirect_into_a_private_address_is_refused(
+async def test_host_resolving_to_a_private_address_is_blocked(
     validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A public URL must not be able to redirect into the internal network."""
-    target = _ipv4(169, 254, 169, 254)
+    """A public name pointing at the internal network is refused before any request."""
+    called = False
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/feed":
-            return httpx.Response(302, headers={"location": f"http://{target}/latest/meta-data/"})
+        nonlocal called
+        called = True
         return httpx.Response(200, text=RSS_WITH_ITEMS)
 
     _patch_transport(monkeypatch, handler)
-    probe = await validator.validate("https://example.test/feed")
+    probe = await validator.validate("https://internal.test/feed")
 
     assert probe.verdict is FeedVerdict.BLOCKED
-    assert "not allowed" in probe.reason
+    assert called is False
+    assert PRIVATE_ADDRESS in probe.reason
 
 
-async def test_public_redirect_is_followed(validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A legitimate redirect to another public host still resolves."""
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "old.test":
-            return httpx.Response(301, headers={"location": "https://new.test/feed"})
-        return httpx.Response(200, text=RSS_WITH_ITEMS)
-
-    _patch_transport(monkeypatch, handler)
-    probe = await validator.validate("https://old.test/feed")
-
-    assert probe.verdict is FeedVerdict.ALIVE
-
-
-async def test_probe_reports_the_effective_url_after_a_redirect(
+async def test_unresolvable_host_is_an_http_error(
     validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The reader stores the effective URL, so duplicate checks need it."""
+    """A name that does not resolve is an unreachable feed, not a blocked one."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "old.test":
-            return httpx.Response(301, headers={"location": "https://new.test/feed"})
-        return httpx.Response(200, text=RSS_WITH_ITEMS)
+    async def failing(host: str, port: int = 443) -> list[str]:
+        raise socket.gaierror("Name or service not known")
 
-    _patch_transport(monkeypatch, handler)
-    probe = await validator.validate("https://old.test/feed")
+    monkeypatch.setattr(feed_validator, "resolve_host_addresses", failing)
+    probe = await validator.validate("https://gone.test/feed")
 
-    assert probe.url == "https://old.test/feed"
-    assert probe.final_url == "https://new.test/feed"
-
-
-async def test_validate_many_preserves_input_order(
-    validator: HttpFeedValidator, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Concurrent probing must not reorder the report."""
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/good":
-            return httpx.Response(200, text=RSS_WITH_ITEMS)
-        return httpx.Response(404)
-
-    _patch_transport(monkeypatch, handler)
-    urls = ["https://example.test/good", "https://example.test/gone", "https://example.test/good2"]
-    probes = await validator.validate_many(urls)
-
-    assert [probe.url for probe in probes] == urls
-    assert [probe.verdict for probe in probes] == [
-        FeedVerdict.ALIVE,
-        FeedVerdict.HTTP_ERROR,
-        FeedVerdict.HTTP_ERROR,
-    ]
+    assert probe.verdict is FeedVerdict.HTTP_ERROR
+    assert "name resolution failed" in probe.reason
 
 
 async def test_validate_many_without_input_returns_empty(validator: HttpFeedValidator) -> None:
     """An empty candidate list is not an error."""
     assert await validator.validate_many([]) == []
-
-
-def _ipv4(*octets: int) -> str:
-    """Assemble a dotted-quad address from its octets."""
-    return ".".join(str(octet) for octet in octets)

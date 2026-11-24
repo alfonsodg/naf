@@ -81,12 +81,15 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/health/ready` | Readiness: PostgreSQL and Miniflux |
 | `GET` | `/api/v1/feeds` | List feeds with health metadata |
 | `GET` | `/api/v1/feeds/health` | Freshness and parsing status per feed |
+| `GET` | `/api/v1/feeds/folders` | Folders found for the feeds, besides the applied category |
 | `POST` | `/api/v1/feeds` | Validate and add one feed, optionally into a category |
 | `PATCH` | `/api/v1/feeds/{id}` | Rename, move to another category, or pause a feed |
+| `DELETE` | `/api/v1/feeds/{id}` | Remove one subscription from the reader |
 | `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
 | `POST` | `/api/v1/feeds/intake` | Validate and add feeds from a URL list or an OPML export |
 | `GET` | `/api/v1/categories` | List reader categories |
-| `GET` | `/api/v1/entries` | List entries with filters and pagination |
+| `GET` | `/api/v1/entries` | List entries with filters, publication period, and pagination |
+| `GET` | `/api/v1/entries/{id}` | Read one entry with its attachments and tags |
 | `PATCH` | `/api/v1/entries/{id}` | Set read or unread status |
 | `GET` | `/api/v1/opml/export` | Export subscriptions as OPML |
 | `POST` | `/api/v1/opml/import` | Deprecated: stores the OPML without validating its feeds |
@@ -97,6 +100,36 @@ or an OPML document, validates every candidate over HTTP, and returns one report
 row per input URL. Only a feed that answered with real entries is added enabled;
 a host that blocks automated clients is reported and added paused, never
 discarded. See `docs/STANDARDS.md` for the verdicts and the safety rules.
+
+The intake keeps itself inside the request budget: probes run in parallel but
+never more than a few against the same host, and a payload larger than the
+configured batch limit is reported in full while only the candidates that fit
+are probed. The rest come back as `not_processed`, so sending the same payload
+again continues where the call stopped.
+
+Each report row states the category that was applied and, separately, the
+folders that were only found in the source document. The reader holds one
+category per feed, so the extra folders are kept in the NAF database and can be
+read from `GET /api/v1/feeds/folders`.
+
+`GET /api/v1/entries` accepts `published_after` and `published_before` as
+ISO-8601 timestamps, which are read as UTC when they carry no zone and
+combine with the other filters. The period is the basis for the reports that
+cover "this week" or "since the last one".
+
+Every entry carries the attachments and the tags the feed provided, so an
+audio enclosure is never lost on the way to a report.
+
+`POST /api/v1/collect` runs one ingestion pass with per-feed failure
+isolation, and every pass is recorded in the NAF database as an ingestion run.
+The response names the run, so a feed that starts failing leaves a trace of
+which feed failed, when, and with what error.
+
+`GET /api/v1/feeds` and `GET /api/v1/feeds/health` return the same projected
+shape: the identifier, the title, the feed and site addresses, the category,
+the last check, the parsing errors, and the paused state. The reader's own
+fields, such as its scraping rules, the credentials of an authenticated feed,
+or its icon, never reach the API.
 
 ## Documentation
 

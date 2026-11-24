@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from app.services.collector import Collector, normalize_entry
+from app.services.collector import Collector, normalize_entry, normalize_feed
 
 
 class StubReader:
@@ -37,10 +37,6 @@ class StubReader:
         """Unused by the collector."""
         raise NotImplementedError
 
-    async def mark_entry_read(self, entry_id: int) -> bool:
-        """Unused by the collector."""
-        raise NotImplementedError
-
     async def export_opml(self) -> str:
         """Unused by the collector."""
         raise NotImplementedError
@@ -52,6 +48,22 @@ class StubReader:
     async def health(self) -> dict[str, Any]:
         """Unused by the collector."""
         raise NotImplementedError
+
+
+class StubRuns:
+    """Run recorder double keeping the passes in memory."""
+
+    def __init__(self) -> None:
+        self.runs: list[dict[str, Any]] = []
+
+    def start(self, adapter_name: str) -> int:
+        """Open a run and return its identifier."""
+        self.runs.append({"run_id": len(self.runs) + 1, "adapter": adapter_name, "status": "running"})
+        return len(self.runs)
+
+    def finish(self, run_id: int, status: str, entries_count: int, errors: list[dict[str, Any]]) -> None:
+        """Close a run with its result."""
+        self.runs[-1].update({"status": status, "entries": entries_count, "errors": errors})
 
 
 def _feed(feed_id: int, title: str) -> dict[str, Any]:
@@ -91,6 +103,54 @@ def test_normalize_entry_preserves_provenance() -> None:
     assert normalized["feed_url"] == "https://alpha.test/rss"
 
 
+def test_normalize_entry_keeps_the_attachments_and_the_tags() -> None:
+    """The enclosure of a podcast and the tags of the feed survive."""
+    feed = _feed(1, "Alpha")
+    entry = _entry(10, feed, "2026-10-18T09:00:00Z")
+    entry["enclosures"] = [{"id": 7, "url": "https://example.test/audio.mp3", "mime_type": "audio/mpeg"}]
+    entry["tags"] = [{"id": 3, "name": "ai"}]
+
+    normalized = normalize_entry(entry)
+
+    assert normalized["enclosures"][0]["mime_type"] == "audio/mpeg"
+    assert normalized["tags"][0]["name"] == "ai"
+
+
+def test_normalize_entry_defaults_the_attachments_and_the_tags() -> None:
+    """An entry without them carries empty lists, not missing fields."""
+    normalized = normalize_entry(_entry(10, _feed(1, "Alpha"), "2026-10-18T09:00:00Z"))
+
+    assert normalized["enclosures"] == []
+    assert normalized["tags"] == []
+
+
+def test_normalize_feed_projects_the_documented_fields() -> None:
+    """The feed is projected onto the fields this project defines."""
+    normalized = normalize_feed(
+        {
+            "id": 1,
+            "title": "Alpha",
+            "feed_url": "https://alpha.test/rss",
+            "site_url": "https://alpha.test",
+            "category": {"id": 7, "title": "Tech"},
+            "checked_at": "2026-10-18T10:00:00Z",
+            "parsing_error_count": 2,
+            "disabled": False,
+            "scraper_rules": "article",
+            "username": "reader-user",
+            "icon": {"id": 3, "data": "aW5jb24="},
+        }
+    )
+
+    assert normalized["feed_id"] == 1
+    assert normalized["url"] == "https://alpha.test/rss"
+    assert normalized["category"] == "Tech"
+    assert normalized["parsing_error_count"] == 2
+    assert "scraper_rules" not in normalized
+    assert "username" not in normalized
+    assert "icon" not in normalized
+
+
 async def test_collect_counts_entries_per_feed() -> None:
     """Each feed contributes its entry count to the run totals."""
     feeds = [_feed(1, "Alpha"), _feed(2, "Beta")]
@@ -107,6 +167,54 @@ async def test_collect_counts_entries_per_feed() -> None:
     assert result["total_entries"] == 2
     assert result["errors"] == []
     assert {feed["feed_id"]: feed["status"] for feed in result["feeds"]} == {1: "ok", 2: "ok"}
+
+
+async def test_the_pass_is_recorded_as_a_run() -> None:
+    """Every pass leaves a run with its counts and its state."""
+    feeds = [_feed(1, "Alpha")]
+    reader = StubReader(feeds, {1: [_entry(10, feeds[0], "2026-10-18T09:00:00Z")]})
+    runs = StubRuns()
+
+    result = await Collector(reader, runs).collect(limit=10)
+
+    assert result["ingestion_run_id"] == 1
+    assert runs.runs[0]["adapter"] == "miniflux"
+    assert runs.runs[0]["status"] == "success"
+    assert runs.runs[0]["entries"] == 1
+
+
+async def test_a_failing_feed_marks_the_run_as_failed() -> None:
+    """A pass with a broken feed is recorded as failed, with the error."""
+    feeds = [_feed(1, "Alpha")]
+    reader = StubReader(feeds, {1: RuntimeError("feed unavailable")})
+    runs = StubRuns()
+
+    await Collector(reader, runs).collect(limit=10)
+
+    assert runs.runs[0]["status"] == "failed"
+    assert runs.runs[0]["errors"][0]["feed_id"] == 1
+
+
+async def test_a_pass_survives_a_broken_recorder() -> None:
+    """The run is a record of the pass, never the pass itself."""
+    feeds = [_feed(1, "Alpha")]
+    reader = StubReader(feeds, {1: [_entry(10, feeds[0], "2026-10-18T09:00:00Z")]})
+
+    class BrokenRuns:
+        """Recorder that always fails."""
+
+        def start(self, adapter_name: str) -> int:
+            """Fail to open the run."""
+            raise RuntimeError("storage is down")
+
+        def finish(self, run_id: int, status: str, entries_count: int, errors: list[dict[str, Any]]) -> None:
+            """Fail to close the run."""
+            raise RuntimeError("storage is down")
+
+    result = await Collector(reader, BrokenRuns()).collect(limit=10)
+
+    assert result["total_entries"] == 1
+    assert result["ingestion_run_id"] is None
 
 
 async def test_one_failing_feed_does_not_block_others() -> None:
@@ -161,3 +269,21 @@ async def test_collect_forwards_limit(limit: int) -> None:
     result = await Collector(reader).collect(limit=limit)
 
     assert result["total_entries"] == 0
+
+
+async def test_a_reader_failure_before_the_loop_closes_the_run() -> None:
+    """A run that could not list the feeds is recorded as failed, not left open."""
+
+    class BrokenReader(StubReader):
+        """Reader whose feed listing fails."""
+
+        async def list_feeds(self) -> list[dict[str, Any]]:
+            raise RuntimeError("reader is down")
+
+    runs = StubRuns()
+    collector = Collector(BrokenReader([], {}), runs)  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError):
+        await collector.collect(limit=10)
+
+    assert runs.runs[0]["status"] == "failed", "the run was left open"

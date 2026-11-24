@@ -16,27 +16,67 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Feed validation with six distinct verdicts: `alive`, `empty`, `http_error`,
   `throttled`, `timeout`, and `blocked`. Only `alive` feeds are added enabled;
   `throttled` feeds are added disabled as unverified instead of being discarded.
+- A `throttled` feed whose host also refuses the reader is now kept through the
+  reader's OPML import, which stores the subscription without downloading it,
+  so the documented promise of never discarding it holds. A refused creation
+  reports the verdict and the HTTP status in the error envelope.
 - Single-feed management: `POST /feeds` (validated add with an optional
-  category), `PATCH /feeds/{id}` (rename, move category, pause), and
+  category), `PATCH /feeds/{id}` (rename, move category, pause),
+  `DELETE /feeds/{id}` (remove the subscription), and
   `POST /feeds/{id}/refresh`; `GET /categories` lists reader categories.
+- Entries can be filtered by publication period: `GET /api/v1/entries` accepts
+  `published_after` and `published_before` as ISO-8601 timestamps, read as UTC
+  when they carry no zone, and sends them to the reader as unix timestamps.
+- `GET /api/v1/entries/{id}` serves one entry with the same shape the list
+  returns, and every entry keeps the attachments and the tags the feed
+  provided.
 - SSRF protection for every candidate URL: `http`/`https` only, no credentials
   in the authority, and loopback, private, link-local, reserved, and metadata
   targets refused, including on each redirect hop.
+- Host resolution for every candidate feed: the name is resolved before the
+  connection and every resolved address must be globally routable, and the
+  request pins the validated address while keeping the original name in the
+  `Host` header and the TLS server name.
 - OPML parsing that preserves folder nesting as categories and reports a feed
   appearing under several tags instead of keeping only the first, which is what
   Miniflux's own importer does.
+- The intake report now names the category that was applied and the folders
+  that were only reported, separately. The reported folders are kept in the NAF
+  database and readable through `GET /api/v1/feeds/folders`, because the reader
+  holds one category per feed.
 - Settings `NAF_FEED_VALIDATION_TIMEOUT`, `NAF_FEED_VALIDATION_CONCURRENCY`,
   `NAF_FEED_VALIDATION_MAX_REDIRECTS`, and `NAF_FEED_INTAKE_MAX_BYTES` in every
   environment file.
+- A candidate response is streamed and capped while it is read, so a server
+  that sends an endless document is refused instead of being buffered in full.
+- Intake limits that keep a large import inside the request budget: a
+  per-host probe limit beside the global one, a bounded retry with backoff for
+  a host that answers `429`, and a batch limit in size and in time. The
+  candidates that do not fit are reported as `not_processed` instead of being
+  dropped. The time bound is a wall-clock bound: the chunk is sized from the
+  per-host limit and the retry count, so a same-host batch cannot outlast it.
 - Readiness probe (`GET /api/v1/health/ready`) that verifies PostgreSQL and the
   Miniflux API and reports each dependency separately.
+- The development compose stack brings up the reader too: `miniflux` and
+  `miniflux-db`, with their own named volumes, so the environment that
+  exercises the whole product comes up on its own.
+- The deployment contract states the public-exposure boundary of the
+  unauthenticated API, and the development stack publishes its port on the
+  loopback interface only.
 - Structured JSON logging with correlation identifiers (`feed_id`,
   `ingestion_run_id`, `digest_id`) and no secret values.
 - Typed configuration with fail-fast required values and the `NAF_`
   environment prefix.
 - Miniflux reader adapter (REST API only) with normalized error handling.
+- The feed list is projected onto a NAF-owned shape, the same one the feed
+  health report uses, so the reader's own fields, its scraping rules, the
+  credentials of an authenticated feed, and its icon never reach the API.
 - Ingestion collector with per-feed failure isolation and preserved
   provenance.
+- Every ingestion pass is recorded in the NAF database as an ingestion run:
+  when it started and finished, whether it succeeded or a feed failed, the
+  entry count, and the per-feed errors. The run identifier is returned by
+  `POST /collect` and carried in the structured logs.
 - README/entry endpoints for health, feeds, feed health, entries, read status,
   OPML import/export, and one ingestion pass.
 - NAF-owned schema: digests, digest stories, entities, ingestion runs, and

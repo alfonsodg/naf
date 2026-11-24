@@ -1,37 +1,19 @@
-"""Feed intake: parsing, verdict handling, and the per-URL report.
+"""Feed intake: verdict handling and the per-URL report.
 
 The reader and the validator are both stubbed at the port boundary, so these
-tests exercise the decision logic only.
+tests exercise the decision logic only. The parsing of the input document is
+covered in `test_intake_parsing.py`.
 """
 
 from typing import Any
 
 import pytest
 
+from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
 from app.core.ports.feed_validator import FeedProbe, FeedVerdict
-from app.services.feed_intake import (
-    CandidateFeed,
-    FeedIntake,
-    parse_opml,
-    parse_url_list,
-)
-
-FEEDLY_OPML = """<?xml version="1.0" encoding="UTF-8"?>
-<opml version="1.0">
-  <head><title>Subscriptions in feedly Cloud</title></head>
-  <body>
-    <outline text="Tech" title="Tech">
-      <outline type="rss" text="Ars Technica" xmlUrl="https://arstechnica.test/rss" htmlUrl="https://arstechnica.test"/>
-      <outline type="rss" text="The Verge" xmlUrl="https://verge.test/rss" htmlUrl="https://verge.test"/>
-    </outline>
-    <outline text="AI" title="AI">
-      <outline type="rss" text="Ars Technica" xmlUrl="https://arstechnica.test/rss" htmlUrl="https://arstechnica.test"/>
-      <outline type="rss" text="DeepMind" xmlUrl="https://deepmind.test/blog/rss"/>
-    </outline>
-    <outline type="rss" text="Loose feed" xmlUrl="https://loose.test/feed"/>
-  </body>
-</opml>"""
+from app.services.feed_documents import CandidateFeed
+from app.services.feed_intake import FeedIntake
 
 
 class StubReader:
@@ -42,7 +24,10 @@ class StubReader:
         self.categories = categories or []
         self.created_feeds: list[dict[str, Any]] = []
         self.created_categories: list[str] = []
+        self.imported_opml: list[str] = []
         self.fail_create = False
+        self.fail_import = False
+        self.fail_category = False
 
     async def list_feeds(self) -> list[dict[str, Any]]:
         return [{"id": index + 1, "feed_url": url} for index, url in enumerate(self.existing)]
@@ -51,6 +36,8 @@ class StubReader:
         return self.categories
 
     async def create_category(self, title: str) -> dict[str, Any]:
+        if self.fail_category:
+            raise MinifluxAPIError("reader refused the category")
         self.created_categories.append(title)
         category = {"id": 100 + len(self.created_categories), "title": title}
         self.categories.append(category)
@@ -71,6 +58,12 @@ class StubReader:
         )
         return {"id": 500 + len(self.created_feeds)}
 
+    async def import_opml(self, opml_content: str) -> dict[str, Any]:
+        if self.fail_import:
+            raise MinifluxAPIError("reader refused the import")
+        self.imported_opml.append(opml_content)
+        return {"message": "Feeds imported successfully"}
+
 
 class StubValidator:
     """Validator double returning preset verdicts keyed by URL."""
@@ -87,95 +80,29 @@ class StubValidator:
             item_count=3 if verdict is FeedVerdict.ALIVE else 0,
         )
 
-    async def validate_many(self, urls: list[str]) -> list[FeedProbe]:
+    async def validate_many(self, urls: list[str], timeout: float | None = None) -> list[FeedProbe]:
         return [await self.validate(url) for url in urls]
 
 
-def _intake(verdicts: dict[str, FeedVerdict], reader: StubReader | None = None) -> tuple[FeedIntake, StubReader]:
+class StubFolders:
+    """Folder store double recording what the intake reports."""
+
+    def __init__(self) -> None:
+        self.recorded: list[tuple[str, list[str]]] = []
+
+    def record(self, feed_url: str, folders: list[str]) -> None:
+        """Record the folders reported for a feed."""
+        self.recorded.append((feed_url, folders))
+
+
+def _intake(
+    verdicts: dict[str, FeedVerdict],
+    reader: StubReader | None = None,
+    folders: StubFolders | None = None,
+) -> tuple[FeedIntake, StubReader]:
     """Build the service under test with both collaborators stubbed."""
     stub = reader or StubReader()
-    return FeedIntake(stub, StubValidator(verdicts)), stub  # type: ignore[arg-type]
-
-
-# --- parsing -----------------------------------------------------------------
-
-
-def test_url_list_ignores_blanks_and_comments() -> None:
-    """A pasted list tolerates blank lines and comments."""
-    text = """
-    # my technical feeds
-    https://a.test/feed
-
-    https://b.test/rss
-    """
-    candidates = parse_url_list(text)
-
-    assert [candidate.url for candidate in candidates] == ["https://a.test/feed", "https://b.test/rss"]
-
-
-def test_url_list_deduplicates() -> None:
-    """The same URL twice collapses to one candidate."""
-    candidates = parse_url_list("https://a.test/feed\nhttps://a.test/feed\n")
-
-    assert len(candidates) == 1
-
-
-def test_url_list_allows_trailing_comment_on_a_line() -> None:
-    """An inline comment after a URL is ignored."""
-    candidates = parse_url_list("https://a.test/feed  # technology\n")
-
-    assert [candidate.url for candidate in candidates] == ["https://a.test/feed"]
-
-
-def test_opml_preserves_category_nesting() -> None:
-    """Folder outlines become the categories of their feeds."""
-    candidates = {candidate.url: candidate for candidate in parse_opml(FEEDLY_OPML)}
-
-    assert candidates["https://verge.test/rss"].categories == ("Tech",)
-    assert candidates["https://deepmind.test/blog/rss"].categories == ("AI",)
-
-
-def test_opml_feed_under_several_tags_keeps_all_of_them() -> None:
-    """Miniflux keeps only the first tag; here the overlap is preserved and reported."""
-    candidates = {candidate.url: candidate for candidate in parse_opml(FEEDLY_OPML)}
-
-    assert candidates["https://arstechnica.test/rss"].categories == ("Tech", "AI")
-
-
-def test_opml_feed_outside_a_folder_has_no_category() -> None:
-    """A top-level subscription is imported without a category."""
-    candidates = {candidate.url: candidate for candidate in parse_opml(FEEDLY_OPML)}
-
-    assert candidates["https://loose.test/feed"].categories == ()
-
-
-def test_opml_counts_each_feed_once() -> None:
-    """Repeated xmlUrl values do not produce duplicate candidates."""
-    candidates = parse_opml(FEEDLY_OPML)
-
-    assert len(candidates) == len({candidate.url for candidate in candidates})
-
-
-def test_opml_rejects_a_non_opml_document() -> None:
-    """An unrelated XML document is refused, not partially parsed."""
-    with pytest.raises(ValueError, match="not an OPML"):
-        parse_opml("<?xml version='1.0'?><rss><channel/></rss>")
-
-
-def test_opml_rejects_malformed_xml() -> None:
-    """Broken XML raises a clear error instead of a parser traceback."""
-    with pytest.raises(ValueError, match="not valid XML"):
-        parse_opml("<opml><body>")
-
-
-def test_opml_rejects_an_entity_expansion_payload() -> None:
-    """Billion-laughs style entities are refused by defusedxml."""
-    payload = """<?xml version="1.0"?>
-    <!DOCTYPE opml [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]>
-    <opml version="2.0"><body><outline text="&b;" xmlUrl="https://x.test/feed"/></body></opml>"""
-
-    with pytest.raises(ValueError):
-        parse_opml(payload)
+    return FeedIntake(stub, StubValidator(verdicts), folders), stub  # type: ignore[arg-type]
 
 
 # --- intake decisions --------------------------------------------------------
@@ -388,10 +315,39 @@ async def test_reader_500_on_create_is_reported_as_duplicate_when_present() -> N
     assert original_list_feeds is not None
 
 
-async def test_reader_refusal_of_an_unverified_feed_is_reported() -> None:
-    """The disabled write can be refused too; that must not look like success."""
+async def test_a_refused_creation_falls_back_to_the_import() -> None:
+    """The reader refuses the fetch, so the feed is kept through the import."""
     reader = StubReader()
     reader.fail_create = True
+    service, _ = _intake({"https://reddit.test/rss": FeedVerdict.THROTTLED}, reader)
+
+    result = await service.add([CandidateFeed(url="https://reddit.test/rss")])
+
+    row = result["feeds"][0]
+    assert row["added"] is True
+    assert row["disabled"] is True
+    assert "unverified" in row["reason"]
+    assert len(reader.imported_opml) == 1
+    assert "https://reddit.test/rss" in reader.imported_opml[0]
+    assert 'miniflux:disabled="true"' in reader.imported_opml[0]
+
+
+async def test_the_import_carries_the_category_of_the_candidate() -> None:
+    """The kept feed lands in the category the intake resolved."""
+    reader = StubReader()
+    reader.fail_create = True
+    service, _ = _intake({"https://reddit.test/rss": FeedVerdict.THROTTLED}, reader)
+
+    await service.add([CandidateFeed(url="https://reddit.test/rss", categories=("Tech",))])
+
+    assert '<outline text="Tech">' in reader.imported_opml[0]
+
+
+async def test_a_refused_creation_and_import_is_reported() -> None:
+    """When the reader refuses both paths, the feed is reported, not added."""
+    reader = StubReader()
+    reader.fail_create = True
+    reader.fail_import = True
     service, _ = _intake({"https://reddit.test/rss": FeedVerdict.THROTTLED}, reader)
 
     result = await service.add([CandidateFeed(url="https://reddit.test/rss")])
@@ -401,30 +357,119 @@ async def test_reader_refusal_of_an_unverified_feed_is_reported() -> None:
     assert "could not fetch it either" in row["reason"]
 
 
-def test_opml_action_outlines_are_ignored() -> None:
-    """Non-outline elements inside body are skipped rather than crashing."""
-    document = """<?xml version="1.0"?>
-    <opml version="2.0"><body>
-      <note>ignored</note>
-      <outline text="Tech"><outline type="rss" text="A" xmlUrl="https://a.test/feed"/></outline>
-    </body></opml>"""
-
-    candidates = parse_opml(document)
-
-    assert [(candidate.url, candidate.categories) for candidate in candidates] == [("https://a.test/feed", ("Tech",))]
+# --- reported folders ---------------------------------------------------------
 
 
-def test_opml_outline_without_a_name_keeps_the_parent_category() -> None:
-    """An unnamed nested folder does not erase the category above it."""
-    document = """<?xml version="1.0"?>
-    <opml version="2.0"><body>
-      <outline text="Tech">
-        <outline>
-          <outline type="rss" text="A" xmlUrl="https://a.test/feed"/>
-        </outline>
-      </outline>
-    </body></opml>"""
+async def test_the_report_separates_the_applied_category_from_the_reported_ones() -> None:
+    """A feed under several folders is applied to one and reports the rest."""
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE})
 
-    candidates = parse_opml(document)
+    result = await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech", "AI"))])
 
-    assert candidates[0].categories == ("Tech",)
+    row = result["feeds"][0]
+    assert row["applied_category"] == "Tech"
+    assert row["reported_categories"] == ["AI"]
+
+
+async def test_the_reported_folders_are_kept() -> None:
+    """The extra folders survive the call, in NAF-owned storage."""
+    folders = StubFolders()
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE}, folders=folders)
+
+    await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech", "AI"))])
+
+    assert folders.recorded == [("https://a.test/feed", ["AI"])]
+
+
+async def test_a_feed_under_one_folder_applies_it() -> None:
+    """A single folder is applied and nothing else is reported."""
+    folders = StubFolders()
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE}, folders=folders)
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech",))])
+
+    row = result["feeds"][0]
+    assert row["applied_category"] == "Tech"
+    assert row["reported_categories"] == []
+    assert folders.recorded == []
+
+
+async def test_a_feed_without_a_folder_applies_nothing() -> None:
+    """A feed outside any folder has no category at all."""
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.ALIVE})
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed")])
+
+    row = result["feeds"][0]
+    assert row["applied_category"] == ""
+    assert row["reported_categories"] == []
+
+
+async def test_a_rejected_feed_applies_no_category() -> None:
+    """A feed that was not added never claims a category."""
+    service, _ = _intake({"https://a.test/feed": FeedVerdict.EMPTY})
+
+    result = await service.add([CandidateFeed(url="https://a.test/feed", categories=("Tech", "AI"))])
+
+    row = result["feeds"][0]
+    assert row["added"] is False
+    assert row["applied_category"] == ""
+    assert row["reported_categories"] == []
+
+
+# --- batch budget ------------------------------------------------------------
+
+
+async def test_a_batch_over_the_limit_reports_every_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A payload larger than the limit is reported in full, not cut silently."""
+    monkeypatch.setattr(settings, "feed_intake_max_batch", 2)
+    service, _ = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(5)]
+
+    result = await service.add(candidates)
+
+    assert result["summary"]["received"] == 5
+    assert result["summary"]["processed"] == 2
+    assert result["summary"]["not_processed"] == 3
+    assert len(result["feeds"]) == 5
+    assert [row["processed"] for row in result["feeds"]] == [True, True, False, False, False]
+    assert result["feeds"][2]["verdict"] == "not_processed"
+    assert result["feeds"][2]["reason"]
+
+
+async def test_the_overflow_is_never_added_to_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A candidate the budget left out is not written to the reader."""
+    monkeypatch.setattr(settings, "feed_intake_max_batch", 1)
+    service, reader = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(3)]
+
+    await service.add(candidates)
+
+    assert [feed["feed_url"] for feed in reader.created_feeds] == ["https://a.test/0"]
+
+
+async def test_an_exhausted_time_budget_leaves_the_rest_unprocessed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A batch that runs out of time is reported, never silently cut."""
+    monkeypatch.setattr(settings, "feed_intake_time_budget", 0.0)
+    service, _ = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(3)]
+
+    result = await service.add(candidates)
+
+    assert result["summary"]["processed"] == 0
+    assert result["summary"]["not_processed"] == 3
+    assert all(row["verdict"] == "not_processed" for row in result["feeds"])
+
+
+async def test_a_batch_inside_the_limit_is_fully_processed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A payload that fits is probed and added as before."""
+    monkeypatch.setattr(settings, "feed_intake_max_batch", 50)
+    service, reader = _intake({})
+    candidates = [CandidateFeed(url=f"https://a.test/{index}") for index in range(3)]
+
+    result = await service.add(candidates)
+
+    assert result["summary"]["processed"] == 3
+    assert result["summary"]["not_processed"] == 0
+    assert result["summary"]["added"] == 3
+    assert len(reader.created_feeds) == 3

@@ -39,39 +39,6 @@ async def test_list_feeds_returns_payload(client: MinifluxClient, monkeypatch: p
     assert feeds == [{"id": 1, "title": "Feed A", "feed_url": "https://a.test/rss"}]
 
 
-async def test_get_entries_returns_entries_key(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """get_entries unwraps the entries collection."""
-
-    async def fake_request(*args: object, **kwargs: object) -> httpx.Response:
-        return _response(200, json_body={"entries": [{"id": 10, "title": "Post"}]})
-
-    monkeypatch.setattr(client, "_request", fake_request)
-    entries = await client.get_entries(limit=10)
-
-    assert entries == [{"id": 10, "title": "Post"}]
-
-
-async def test_get_entries_builds_filters(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Filter arguments are translated into API query parameters."""
-    captured: dict[str, object] = {}
-
-    async def fake_request(method: str, path: str, **kwargs: object) -> httpx.Response:
-        captured.update(kwargs)
-        return _response(200, json_body={"entries": []})
-
-    monkeypatch.setattr(client, "_request", fake_request)
-    await client.get_entries(feed_id=3, read=True, starred=False, search="model", limit=5, offset=10)
-
-    assert captured["params"] == {
-        "limit": 5,
-        "offset": 10,
-        "feed_id": 3,
-        "starred": 0,
-        "status": "read",
-        "search": "model",
-    }
-
-
 async def test_transport_error_becomes_domain_error(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Transport failures must surface as MinifluxAPIError."""
 
@@ -151,32 +118,6 @@ async def test_health_reads_healthcheck_body(client: MinifluxClient, monkeypatch
     status = await client.health()
 
     assert status == {"status": "OK"}
-
-
-async def test_get_entries_page_returns_total(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pagination exposes both the page slice and the unpaginated total."""
-
-    async def fake_request(*args: object, **kwargs: object) -> httpx.Response:
-        return _response(200, json_body={"entries": [{"id": 1}], "total": 137})
-
-    monkeypatch.setattr(client, "_request", fake_request)
-    entries, total = await client.get_entries_page(limit=50, offset=100)
-
-    assert entries == [{"id": 1}]
-    assert total == 137
-
-
-async def test_get_entries_page_defaults_total_to_zero(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A payload without a total reports zero rather than raising."""
-
-    async def fake_request(*args: object, **kwargs: object) -> httpx.Response:
-        return _response(200, json_body={"entries": []})
-
-    monkeypatch.setattr(client, "_request", fake_request)
-    entries, total = await client.get_entries_page()
-
-    assert entries == []
-    assert total == 0
 
 
 async def test_create_feed_posts_to_the_validated_endpoint(

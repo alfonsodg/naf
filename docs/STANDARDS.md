@@ -92,9 +92,14 @@ services, or `db`; `tests/unit/test_app_structure.py` enforces this.
 - Errors are domain exceptions from `src/app/core/exceptions.py`; routers
   translate them into the documented error envelope.
 - No silent data loss: entries without a publication date are kept, and
-  per-feed failures never abort an ingestion pass.
+  per-feed failures never abort an ingestion pass. The normalized entry keeps
+  the attachments and the tags the feed provided, because an audio enclosure
+  is part of the provenance of a podcast entry.
 - Public functions and classes carry docstrings stating responsibility and
   inputs/outputs. Commented-out code is not committed.
+- Timestamps cross the API as ISO-8601 and are normalised to UTC at the
+  boundary; a value without a zone is read as UTC. The reader receives unix
+  timestamps, which is the format its API expects.
 
 ## Linting and formatting
 
@@ -151,6 +156,30 @@ is accessed only through its REST API. Accessing Miniflux tables directly is
 prohibited. NAF owns digests, citations, audio assets, classification, and
 ingestion runs in its own PostgreSQL database.
 
+The NAF API owns the feed write surface: adding, renaming, moving, pausing,
+refreshing, and removing a subscription. Removing one deletes the subscription
+from the reader and nothing else: the entries it carried and every NAF-owned
+record stay untouched, and no volume is ever removed with it.
+
+Every reader object is projected onto a shape this project defines before it
+leaves the API. The feed list, the feed health report, the single-feed write,
+and the entry list each expose the fields documented in `README.md`, never the
+reader's own internals such as its scraping rules, the credentials of an
+authenticated feed, or its icon.
+
+The OPML export is the exception, and it is deliberate: it is the reader's own
+document, built to be re-imported, and it carries the subscription settings the
+reader stores. It does not carry feed credentials, which the reader keeps
+outside the document and in separate fields.
+
+Every ingestion pass is recorded in `ingestion_runs`: when it started, when it
+finished, whether it succeeded or a feed failed, how many entries it saw, and
+which feeds failed with which error. The run identifier is returned by
+`POST /collect` and carried in the structured logs. A run is a record of the
+pass, never a precondition for it: a storage problem is logged and the pass
+continues. The run is closed on every exit, including the paths that raise, so
+no row is ever left running by a pass that never finished.
+
 ## Feed intake and validation
 
 A feed URL arriving from a pasted list, an OPML export, or a form field is
@@ -170,21 +199,65 @@ exactly one verdict:
 | `timeout` | no response within the configured limit | reported, not added |
 | `blocked` | forbidden scheme, host, or redirect target | reported, not added |
 
+`not_processed` is not a probe verdict but a report outcome: the batch limit
+or the time budget left that candidate out. It is reported so the caller knows
+the payload was only partly handled, and sending the same payload again
+continues where the call stopped, because the candidates already added come
+back as duplicates.
+
 `throttled` is deliberately distinct: a host that refuses automated clients
 (Reddit, several CDNs) still serves the same feed to a browser. Treating that
 as a dead feed would discard a valid subscription, so it is added paused rather
-than dropped.
+than dropped. The reader downloads the feed before storing it, even when the
+creation asks for a disabled feed, so the creation is attempted first and, when
+the reader refuses it too, the feed is stored through the reader's OPML import,
+which downloads nothing and marks the feed as disabled.
 
 **Feeds are created one at a time.** `POST /v1/feeds` fetches and parses a feed
 before inserting it; `POST /v1/import` inserts straight into the database
 without fetching anything and is not atomic. Bulk intake therefore uses the
 per-feed endpoint and keeps its own report, and `POST /opml/import` is
-deprecated.
+deprecated. The import is used for one case only, a feed whose host refuses
+automated clients, where storing the subscription without downloading it is the
+whole point.
+
+**One feed, one applied category.** The reader holds a single category per
+feed, so a feed found under several folders is applied to the first one and
+the rest are only reported. The report names the applied category and the
+reported folders separately, so it never claims an organisation the reader does
+not have. The reported folders are NAF-owned data, kept in `feed_folders` and
+readable through `GET /api/v1/feeds/folders`, because they are the only trace
+of the tags the user had.
+
+**Intake stays inside the request budget.** A global limit bounds the probes
+of one batch and a second limit bounds the probes against a single host, so a
+catalogue that points many URLs at one server never floods it. A host that
+answers `429` is retried after the delay it asks for, and the number of
+retries is bounded. The batch is bounded in size and in time as well, so a
+large import cannot outlast the reverse proxy and leave the caller without a
+report.
+
+The time bound is a wall-clock bound, not a per-request timeout. The per-host
+limit turns a chunk into several rounds, and a probe may spend its timeout once
+per attempt, so a chunk is sized as `per_host_concurrency x (1 + retries)` and
+each probe gets the remaining budget divided by the same attempt count. The
+worst case of one chunk is therefore the remaining budget; the call can only
+overshoot it by one probe round. A test measures the elapsed time and fails if
+the call exceeds the budget plus one timeout.
+
+**A response is capped while it is read.** The probe streams the body and
+stops as soon as `NAF_FEED_INTAKE_MAX_BYTES` is exceeded, so a server that
+sends an endless document is refused instead of being buffered. The cap is
+applied to the bytes as they arrive, not to a body that was already read.
 
 **SSRF is refused before the network.** Only `http` and `https` are accepted;
 credentials in the authority, loopback, private, link-local, reserved, and
 metadata targets are rejected, and every redirect hop is re-validated because
-httpx would otherwise follow one into a private address. This holds even with a
+httpx would otherwise follow one into a private address. The hostname is also
+resolved before the connection, and every resolved address must be globally
+routable. The request then pins the validated address while keeping the
+original name in the `Host` header and in the TLS server name, so a second
+lookup cannot move the socket to another target. This holds even with a
 single user and no public exposure.
 
 ## Git conventions

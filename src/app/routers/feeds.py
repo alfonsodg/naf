@@ -1,22 +1,29 @@
 """Feed and entry API. Reader state is owned by Miniflux."""
 
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
+from sqlalchemy.orm import Session
 
 from app.adapters.http.feed_validator import HttpFeedValidator
 from app.adapters.miniflux.client import MinifluxClient
 from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
+from app.db.session import get_session
 from app.schemas.errors import error_body
 from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
-from app.services.collector import Collector, normalize_entry
-from app.services.feed_intake import CandidateFeed, FeedIntake, parse_opml, parse_url_list
+from app.services.collector import Collector, normalize_entry, normalize_feed
+from app.services.feed_documents import CandidateFeed, parse_opml, parse_url_list
+from app.services.feed_folders import FeedFolderStore
+from app.services.feed_intake import FeedIntake
+from app.services.ingestion_runs import IngestionRunStore
 
 router = APIRouter()
 
 LimitQuery = Annotated[int, Query(ge=1, le=500, description="Items per page")]
 PageQuery = Annotated[int, Query(ge=1, description="Page number, 1-based")]
+SessionDep = Annotated[Session, Depends(get_session)]
 
 
 def _client() -> MinifluxClient:
@@ -24,14 +31,14 @@ def _client() -> MinifluxClient:
     return MinifluxClient()
 
 
-def _collector() -> Collector:
-    """Build a collector bound to the reader adapter."""
-    return Collector(_client())
+def _collector(session: Session) -> Collector:
+    """Build a collector bound to the reader adapter and the run recorder."""
+    return Collector(_client(), IngestionRunStore(session))
 
 
-def _intake() -> FeedIntake:
-    """Build the intake service bound to the reader and the HTTP validator."""
-    return FeedIntake(_client(), HttpFeedValidator())
+def _intake(session: Session) -> FeedIntake:
+    """Build the intake service bound to the reader, the validator, and the store."""
+    return FeedIntake(_client(), HttpFeedValidator(), FeedFolderStore(session))
 
 
 def _unavailable(exc: MinifluxAPIError) -> HTTPException:
@@ -39,44 +46,58 @@ def _unavailable(exc: MinifluxAPIError) -> HTTPException:
     return HTTPException(status_code=502, detail=error_body("MINIFLUX_UNAVAILABLE", str(exc)))
 
 
-def _invalid(code: str, message: str) -> HTTPException:
+def _invalid(code: str, message: str, details: list[dict[str, Any]] | None = None) -> HTTPException:
     """Translate an input problem into the documented error envelope."""
-    return HTTPException(status_code=422, detail=error_body(code, message))
+    return HTTPException(status_code=422, detail=error_body(code, message, details))
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    """Return the instant in UTC, reading a naive value as already UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 @router.get("/feeds")
 async def list_feeds() -> list[dict[str, Any]]:
     """List configured feeds with their health metadata."""
     try:
-        return await _client().list_feeds()
+        feeds = await _client().list_feeds()
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
+    return [normalize_feed(feed) for feed in feeds]
 
 
 @router.get("/feeds/health")
-async def feeds_health() -> list[dict[str, Any]]:
+async def feeds_health(session: SessionDep) -> list[dict[str, Any]]:
     """Report per-feed freshness, parsing errors and disabled state."""
     try:
-        return await _collector().health_report()
+        return await _collector(session).health_report()
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
 
 
 @router.post("/feeds", status_code=201)
-async def create_feed(payload: FeedCreateRequest) -> dict[str, Any]:
+async def create_feed(payload: FeedCreateRequest, session: SessionDep) -> dict[str, Any]:
     """Validate one feed and add it when it answers with real entries."""
     candidate = CandidateFeed(
         url=payload.feed_url,
         categories=(payload.category,) if payload.category else (),
     )
     try:
-        result = await _intake().add([candidate])
+        result = await _intake(session).add([candidate])
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
 
     row = result["feeds"][0]
     if not row["added"]:
-        raise _invalid("FEED_REJECTED", row["reason"] or "the feed could not be validated")
+        raise _invalid(
+            "FEED_REJECTED",
+            row["reason"] or "the feed could not be validated",
+            [{"url": row["url"], "verdict": row["verdict"], "status_code": row["status_code"]}],
+        )
     return {"data": row}
 
 
@@ -97,7 +118,7 @@ async def update_feed(
         )
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
-    return {"data": updated}
+    return {"data": normalize_feed(updated)}
 
 
 @router.post("/feeds/{feed_id}/refresh")
@@ -110,6 +131,25 @@ async def refresh_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
     return {"data": {"feed_id": feed_id, "refresh_requested": awaited}}
 
 
+@router.delete("/feeds/{feed_id}")
+async def delete_feed(feed_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
+    """Remove one subscription from the reader.
+
+    Only the subscription is removed. The entries it carried and every
+    NAF-owned record stay untouched.
+    """
+    try:
+        removed = await _client().delete_feed(feed_id)
+    except MinifluxAPIError as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=error_body("FEED_NOT_FOUND", "the reader does not have that subscription"),
+            ) from exc
+        raise _unavailable(exc) from exc
+    return {"data": {"feed_id": feed_id, "removed": removed}}
+
+
 @router.get("/categories")
 async def list_categories() -> list[dict[str, Any]]:
     """List the reader categories."""
@@ -120,7 +160,7 @@ async def list_categories() -> list[dict[str, Any]]:
 
 
 @router.post("/feeds/intake", status_code=201)
-async def intake_feeds(request: Request) -> dict[str, Any]:
+async def intake_feeds(request: Request, session: SessionDep) -> dict[str, Any]:
     """Validate and add feeds from a pasted URL list or an OPML document.
 
     A plain-text body is read as one URL per line. A body carrying XML is read
@@ -149,9 +189,15 @@ async def intake_feeds(request: Request) -> dict[str, Any]:
         raise _invalid("FEED_INTAKE_EMPTY", "no feed URL was found in the payload")
 
     try:
-        return {"data": await _intake().add(candidates)}
+        return {"data": await _intake(session).add(candidates)}
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
+
+
+@router.get("/feeds/folders")
+async def list_feed_folders(session: SessionDep) -> dict[str, Any]:
+    """List the folders found for the feeds, besides the applied category."""
+    return {"data": FeedFolderStore(session).list_folders()}
 
 
 @router.get("/entries")
@@ -163,6 +209,8 @@ async def list_entries(
     search: str | None = None,
     read: bool | None = None,
     starred: bool | None = None,
+    published_after: datetime | None = None,
+    published_before: datetime | None = None,
 ) -> dict[str, Any]:
     """List normalized entries preserving provenance, with pagination metadata."""
     offset = (page - 1) * per_page
@@ -175,6 +223,8 @@ async def list_entries(
             search=search,
             read=read,
             starred=starred,
+            published_after=_utc(published_after),
+            published_before=_utc(published_before),
         )
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc
@@ -189,6 +239,16 @@ async def list_entries(
             "total_pages": total_pages,
         },
     }
+
+
+@router.get("/entries/{entry_id}")
+async def read_entry(entry_id: Annotated[int, Path(ge=1)]) -> dict[str, Any]:
+    """Return one entry with the same shape the list returns."""
+    try:
+        entry = await _client().get_entry(entry_id)
+    except MinifluxAPIError as exc:
+        raise _unavailable(exc) from exc
+    return {"data": normalize_entry(entry)}
 
 
 @router.patch("/entries/{entry_id}")
@@ -206,7 +266,12 @@ async def update_entry(
 
 @router.get("/opml/export")
 async def export_opml() -> dict[str, Any]:
-    """Export subscriptions as OPML for portability."""
+    """Export subscriptions as OPML for portability.
+
+    The document is the reader's own export, not a projection: it carries the
+    subscription settings the reader stores. It does not carry feed credentials,
+    which the reader keeps outside the document.
+    """
     try:
         return {"data": {"opml": await _client().export_opml()}}
     except MinifluxAPIError as exc:
@@ -228,9 +293,9 @@ async def import_opml(opml: Annotated[str, Body(media_type="text/xml")]) -> dict
 
 
 @router.post("/collect")
-async def collect(limit: LimitQuery = 100) -> dict[str, Any]:
+async def collect(session: SessionDep, limit: LimitQuery = 100) -> dict[str, Any]:
     """Run one ingestion pass with per-feed failure isolation."""
     try:
-        return {"data": await _collector().collect(limit=limit)}
+        return {"data": await _collector(session).collect(limit=limit)}
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc

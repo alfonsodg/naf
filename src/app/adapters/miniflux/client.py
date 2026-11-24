@@ -1,5 +1,6 @@
 """Miniflux reader adapter. Access is strictly through the REST API."""
 
+from datetime import datetime
 from typing import Any, cast
 
 import httpx
@@ -53,7 +54,8 @@ class MinifluxClient(FeedReader):
             # would reduce every failure to a bare status code.
             detail = _error_message(exc.response)
             raise MinifluxAPIError(
-                f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else "")
+                f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else ""),
+                status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:
             raise MinifluxAPIError(f"Miniflux {path} request failed: {exc}") from exc
@@ -77,6 +79,8 @@ class MinifluxClient(FeedReader):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """List entries with optional filters."""
         entries, _ = await self.get_entries_page(
@@ -87,6 +91,8 @@ class MinifluxClient(FeedReader):
             starred=starred,
             read=read,
             search=search,
+            published_after=published_after,
+            published_before=published_before,
         )
         return entries
 
@@ -99,6 +105,8 @@ class MinifluxClient(FeedReader):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """List one page of entries and return it with the total count."""
         params: dict[str, Any] = {"limit": limit, "offset": offset}
@@ -112,6 +120,10 @@ class MinifluxClient(FeedReader):
             params["status"] = "read" if read else "unread"
         if search:
             params["search"] = search
+        if published_after is not None:
+            params["published_after"] = int(published_after.timestamp())
+        if published_before is not None:
+            params["published_before"] = int(published_before.timestamp())
 
         response = await self._request("GET", "/v1/entries", params=params)
         payload = response.json()
@@ -130,10 +142,6 @@ class MinifluxClient(FeedReader):
             json_body={"entry_ids": entry_ids, "status": status},
         )
         return response.status_code == httpx.codes.NO_CONTENT
-
-    async def mark_entry_read(self, entry_id: int) -> bool:
-        """Mark a single entry as read."""
-        return await self.update_entries_status([entry_id], "read")
 
     async def export_opml(self) -> str:
         """Export all subscriptions as OPML."""
@@ -213,6 +221,11 @@ class MinifluxClient(FeedReader):
     async def refresh_feed(self, feed_id: int) -> bool:
         """Ask the reader to refresh one feed now."""
         response = await self._request("PUT", f"/v1/feeds/{feed_id}/refresh")
+        return response.status_code == httpx.codes.NO_CONTENT
+
+    async def delete_feed(self, feed_id: int) -> bool:
+        """Remove one subscription from the reader."""
+        response = await self._request("DELETE", f"/v1/feeds/{feed_id}")
         return response.status_code == httpx.codes.NO_CONTENT
 
 

@@ -1,6 +1,7 @@
 """Reader port. Reader state is owned by Miniflux, never by NAF."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any
 
 
@@ -25,6 +26,8 @@ class FeedReader(ABC):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """List entries honoring every optional filter."""
 
@@ -38,6 +41,8 @@ class FeedReader(ABC):
         starred: bool | None = None,
         read: bool | None = None,
         search: str | None = None,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """List one page of entries and report the unpaginated total."""
 
@@ -48,10 +53,6 @@ class FeedReader(ABC):
     @abstractmethod
     async def update_entries_status(self, entry_ids: list[int], status: str) -> bool:
         """Set the read status for one or more entries."""
-
-    @abstractmethod
-    async def mark_entry_read(self, entry_id: int) -> bool:
-        """Mark one entry as read."""
 
     @abstractmethod
     async def export_opml(self) -> str:
@@ -94,3 +95,7 @@ class FeedReader(ABC):
     @abstractmethod
     async def refresh_feed(self, feed_id: int) -> bool:
         """Ask the reader to refresh one feed now."""
+
+    @abstractmethod
+    async def delete_feed(self, feed_id: int) -> bool:
+        """Remove one subscription from the reader."""
