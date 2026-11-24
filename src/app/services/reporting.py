@@ -22,7 +22,7 @@ from app.schemas.digest import Digest as GeneratedDigest
 from app.schemas.reports import ReportCreateRequest
 from app.services.report_selection import published_at, select_entries, utc
 
-PROMPT_VERSION = "1.0"
+PROMPT_VERSION = "1.1"
 NO_NEWS_TITLE = "Sin novedades"
 NO_NEWS_SUMMARY = "No hay entradas nuevas en el periodo solicitado. No se reutiliza contenido de informes anteriores."
 FAILED_TITLE = "Informe no generado"
