@@ -47,6 +47,13 @@ def select_public_address(host: str, addresses: list[str]) -> str:
         if _is_forbidden(address):
             raise FeedURLError(f"host {host} resolves to {candidate}, which is a {_forbidden_reason(address)} address")
 
+    # The pin must be reachable from this process. Container networks commonly
+    # have no IPv6 route while the host still publishes a AAAA record, and a
+    # sorted list puts the IPv6 address first. Prefer IPv4 when it exists, and
+    # keep IPv6 for IPv6-only hosts.
+    for candidate in addresses:
+        if isinstance(ipaddress.ip_address(candidate), ipaddress.IPv4Address):
+            return candidate
     return addresses[0]
 
 
