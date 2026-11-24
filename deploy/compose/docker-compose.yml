@@ -79,6 +79,16 @@ services:
       # The cap stays enforced while the body is read; forwarding it lets a
       # deployment raise it for a large but legitimate feed.
       NAF_FEED_INTAKE_MAX_BYTES: ${NAF_FEED_INTAKE_MAX_BYTES:-1000000}
+      # Report generator. Empty model or key leaves the routes answering 503
+      # until a provider is provisioned, instead of failing at startup.
+      NAF_LLM_PROVIDER: ${NAF_LLM_PROVIDER:-openai}
+      NAF_LLM_BASE_URL: ${NAF_LLM_BASE_URL:-https://api.openai.com/v1}
+      NAF_LLM_API_KEY: ${NAF_LLM_API_KEY:-}
+      NAF_LLM_MODEL: ${NAF_LLM_MODEL:-}
+      NAF_LLM_TIMEOUT: ${NAF_LLM_TIMEOUT:-60}
+      NAF_LLM_MAX_OUTPUT_TOKENS: ${NAF_LLM_MAX_OUTPUT_TOKENS:-4000}
+      NAF_REPORT_MAX_ENTRIES: ${NAF_REPORT_MAX_ENTRIES:-120}
+      NAF_REPORT_DEFAULT_DAYS: ${NAF_REPORT_DEFAULT_DAYS:-7}
     volumes:
       - naf-audio:/data/audio
     ports:

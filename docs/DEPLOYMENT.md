@@ -102,6 +102,13 @@ it, because the container never receives the variable.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NAF_FEED_INTAKE_MAX_BYTES` | `1000000` | Largest feed document accepted during intake; enforced while the body is read |
+| `NAF_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root for report generation |
+| `NAF_LLM_API_KEY` | empty | Provider key; empty disables the report routes with `503` |
+| `NAF_LLM_MODEL` | empty | Model id; empty disables the report routes with `503` |
+| `NAF_LLM_TIMEOUT` | `60` | Seconds allowed for one completion |
+| `NAF_LLM_MAX_OUTPUT_TOKENS` | `4000` | Hard ceiling on the tokens one report may return |
+| `NAF_REPORT_MAX_ENTRIES` | `120` | Largest selection sent to the model; bounds the per-report cost |
+| `NAF_REPORT_DEFAULT_DAYS` | `7` | Window used when a request names neither a period nor `since_last` |
 
 Raise the cap only for a validated source that publishes more than the default,
 and keep the value bounded: it is a memory limit, not a preference.
