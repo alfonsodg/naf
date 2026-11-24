@@ -11,7 +11,7 @@ def _script() -> ScriptDirectory:
 
 def test_the_chain_has_exactly_one_head() -> None:
     """Two heads would make the deployed schema ambiguous."""
-    assert _script().get_heads() == ["f1a2b3c4d5e6"]
+    assert _script().get_heads() == ["b2c3d4e5f6a7"]
 
 
 def test_every_revision_defines_upgrade_and_downgrade() -> None:
