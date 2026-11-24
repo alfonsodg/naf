@@ -98,9 +98,9 @@ class Settings(BaseSettings):
     )
     llm_api_key: str = Field(default="", description="LLM provider API key")
     llm_model: str = Field(default="", description="Model identifier; empty means the adapter is not configured")
-    llm_timeout: float = Field(default=60.0, gt=0, description="Seconds allowed for one completion")
+    llm_timeout: float = Field(default=120.0, gt=0, description="Seconds allowed for one completion")
     llm_max_output_tokens: int = Field(
-        default=4000,
+        default=6000,
         ge=256,
         le=32000,
         description="Hard ceiling on tokens the provider may return for one report",
@@ -108,7 +108,7 @@ class Settings(BaseSettings):
 
     # Report generation
     report_max_entries: int = Field(
-        default=120,
+        default=40,
         ge=1,
         le=500,
         description="Largest selection sent to the model; bounds the per-report cost",

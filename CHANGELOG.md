@@ -9,6 +9,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- On-demand text reports: `POST /api/v1/reports` selects entries by period,
+  feeds, categories, tags, search, read/starred state, or the saved cursor,
+  writes a Spanish report with a citation for every claim, and stores the
+  edition with its filters, entries, model, and version. An empty selection
+  returns `status: no_news` with an explicit message, and the history is
+  readable through `GET /api/v1/reports` and `/reports/{id}`.
 - Container publishing: a tag push builds the multi-stage image and pushes
   `ghcr.io/alfonsodg/naf:<tag>` plus a `sha-<short>` tag to GHCR, with layer
   caching and no build on a plain branch push.
