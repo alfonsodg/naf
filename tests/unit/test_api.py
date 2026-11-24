@@ -24,8 +24,8 @@ def test_versioned_health_endpoint() -> None:
 
 
 def test_unknown_route_returns_404() -> None:
-    """No catch-all root route is exposed."""
-    assert client.get("/").status_code == 404
+    """An undefined path is not served by any catch-all route."""
+    assert client.get("/no-such-route").status_code == 404
 
 
 def test_entries_rejects_non_positive_page() -> None:

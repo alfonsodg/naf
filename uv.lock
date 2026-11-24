@@ -3,13 +3,13 @@ revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and extra != 'extra-3-naf-audio' and extra == 'extra-3-naf-tts'",
-    "python_full_version < '3.15' and extra != 'extra-3-naf-audio' and extra == 'extra-3-naf-tts'",
     "python_full_version >= '3.15' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
+    "python_full_version >= '3.15' and extra != 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
     "python_full_version == '3.14.*' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
     "python_full_version == '3.13.*' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
     "python_full_version >= '3.12.4' and python_full_version < '3.13' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
+    "python_full_version < '3.15' and extra != 'extra-3-naf-audio' and extra == 'extra-3-naf-tts'",
     "python_full_version < '3.12.4' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version >= '3.15' and extra != 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
     "python_full_version < '3.15' and extra != 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
 ]
 conflicts = [[
@@ -2705,9 +2705,11 @@ dependencies = [
     { name = "defusedxml" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "jinja2" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-multipart" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -2742,6 +2744,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "kokoro-onnx", marker = "extra == 'tts'", specifier = ">=0.4.9" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
     { name = "podcastfy", marker = "extra == 'audio'", specifier = ">=0.4.3" },
@@ -2751,6 +2754,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
@@ -3820,6 +3824,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/31/72/58d77cb80b3c130d94f53a8204ffad9acfddb925b2fb5818ff9af0b3c832/python_levenshtein-0.26.1.tar.gz", hash = "sha256:24ba578e28058ebb4afa2700057e1678d7adf27e43cd1f17700c09a9009d5d3a", size = 12276, upload-time = "2024-10-27T22:05:15.622Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/d7/03e0453719ed89724664f781f0255949408118093dbf77a2aa2a1198b38e/python_Levenshtein-0.26.1-py3-none-any.whl", hash = "sha256:8ef5e529dd640fb00f05ee62d998d2ee862f19566b641ace775d5ae16167b2ef", size = 9426, upload-time = "2024-10-27T22:05:14.311Z" },
+]
+
+[[package]]
+name = "python-multipart"
+version = "0.0.34"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/c0/c753d487a83d873f6946cee6cbc26cea3fe59a476ad0de99a14938a2fbd8/python_multipart-0.0.34.tar.gz", hash = "sha256:b998ae90ca6e1e363261ce2e0e230281b8af53867b757970abd69ee9edcd843a", size = 52456, upload-time = "2026-11-16T10:40:38.261Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/0e/090c52b122d8ec5fa37942c1410fea9cf04ce98bca0c84dde7f0aa11594d/python_multipart-0.0.34-py3-none-any.whl", hash = "sha256:ebacd224bd686eee2f9aa1066a657affe07435a185834e05e5235e2e59173e91", size = 32585, upload-time = "2026-11-16T10:40:37.119Z" },
 ]
 
 [[package]]

@@ -9,6 +9,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Web interface: the same FastAPI service renders a Spanish screen to create a
+  report, read its stories with every citation linked to the original URL,
+  play the stored audio, and follow the synchronized transcript by segment.
+  `GET /sources` lists the reader feeds with their category and last check, and
+  `POST /ui/reports/{report_id}/audio` synthesizes an edition and returns to it
+  with a recoverable notice. The pages reuse the API services and never expose
+  Miniflux to the browser.
 - Report audio: `POST /api/v1/reports/{report_id}/audio` synthesizes the stored
   edition with Kokoro ONNX and a Spanish voice, segments the script by sentence,
   concatenates one mono 24 kHz WAV, and keeps it as an immutable asset that

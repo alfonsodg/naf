@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Fuentes · naf{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <h1>Fuentes</h1>
+  <p>Las fuentes las administra Miniflux; aquí se consultan con su categoría y su última lectura.</p>
+</div>
+
+{% if error %}<p class="alert alert--error" role="alert">{{ error }} <a href="/sources">Volver a intentarlo</a>.</p>{% endif %}
+
+{% if feeds %}
+<div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Fuentes configuradas</caption>
+    <thead>
+      <tr>
+        <th scope="col">Fuente</th>
+        <th scope="col">Categoría</th>
+        <th scope="col">Última consulta</th>
+        <th scope="col">Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for feed in feeds %}
+      <tr>
+        <td>
+          {% if feed.url %}<a href="{{ feed.url }}" target="_blank" rel="noopener noreferrer">{{ feed.title or feed.url }}</a>
+          {% else %}{{ feed.title or "Sin título" }}{% endif %}
+        </td>
+        <td>{{ feed.category or "Sin categoría" }}</td>
+        <td>{{ feed.checked_at or "Sin datos" }}</td>
+        <td>
+          {{ "En pausa" if feed.disabled else "Activa" }}
+          {% if feed.parsing_error_count %} · {{ feed.parsing_error_count }} errores{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif not error %}
+<p class="empty">No hay fuentes configuradas.</p>
+{% endif %}
+{% endblock %}

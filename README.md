@@ -250,6 +250,28 @@ returns the file, and the report detail lists its duration, size, provider, and
 voice. A second request returns the stored asset unless `force=true`; a
 synthesis failure leaves the text edition intact and answers `502`.
 
+## Web interface
+
+The same process renders the complementary screens the product plan requires
+(decision 3, "web only"); it is not a second deployment, and the browser never
+talks to Miniflux directly. The pages call the same `ReportService`,
+`AudioService`, and reader adapter as the API.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Report history and the report creation form |
+| `POST` | `/ui/reports` | Generate one report and redirect to its edition |
+| `GET` | `/reports/{report_id}` | Report, citations, audio player, and synced transcript |
+| `POST` | `/ui/reports/{report_id}/audio` | Synthesize the spoken edition and redirect back |
+| `GET` | `/sources` | Feeds with their category and last check |
+| `GET` | `/static/*` | Stylesheet and the vanilla-JS player |
+
+The report page links every claim to its source, inlines the segments stored
+with the audio asset, highlights the segment being spoken, and seeks when a
+segment is selected. Spanish labels and messages are the only user-facing
+text; a generation or speech failure re-renders the text edition without
+leaking the provider detail. There is no framework and no build step.
+
 ## Documentation
 
 - `docs/STANDARDS.md` — stack, layout, tooling, testing, and conventions.
