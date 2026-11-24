@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import TTSError
 from app.main import app
 from app.models import AudioAsset, Digest
+from app.routers import reports
 from app.services.audio import MAX_SEGMENT_CHARS
 
 client = TestClient(app)
@@ -231,3 +232,11 @@ def test_the_audio_routes_are_published() -> None:
 
     assert "post" in paths[audio_path]
     assert "get" in paths[audio_path]
+
+
+def test_the_storage_factory_builds_the_local_adapter(monkeypatch) -> None:
+    """The route factory returns the adapter it is wired to, not a stray object."""
+    built = object()
+    monkeypatch.setattr(reports, "LocalAudioStorage", lambda: built)
+
+    assert reports._audio_storage() is built
