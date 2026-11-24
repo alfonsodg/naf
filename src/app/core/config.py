@@ -90,6 +90,14 @@ class Settings(BaseSettings):
         description="Seconds one intake request may spend probing candidates",
     )
 
+    # Pilot metrics
+    reader_polling_interval_minutes: int = Field(
+        default=20,
+        ge=1,
+        le=1440,
+        description="Minutes between polls of one feed; a feed twice that old is stale in the metrics snapshot",
+    )
+
     # LLM adapter (report generation)
     llm_provider: str = "openai"
     llm_base_url: str = Field(

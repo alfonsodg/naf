@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
-from app.routers import entries, feeds, health, ingestion_runs, reports, ui
+from app.routers import entries, feeds, health, ingestion_runs, metrics, reports, ui
 
 logger = get_logger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -36,6 +36,7 @@ app.include_router(health.router, prefix=settings.api_prefix, tags=["health"])
 app.include_router(feeds.router, prefix=settings.api_prefix, tags=["feeds"])
 app.include_router(entries.router, prefix=settings.api_prefix, tags=["entries"])
 app.include_router(ingestion_runs.router, prefix=settings.api_prefix, tags=["ingestion"])
+app.include_router(metrics.router, prefix=settings.api_prefix, tags=["metrics"])
 app.include_router(reports.router, prefix=settings.api_prefix, tags=["reports"])
 app.include_router(ui.router, tags=["ui"])
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

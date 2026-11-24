@@ -9,6 +9,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- Pilot metrics: `GET /api/v1/metrics?days=7` reads the observation window from
+  NAF-owned ingestion runs, report editions, and audio assets plus the reader's
+  feed list. Freshness and stale sources, pass success, report and audio rates,
+  p50/p95 wall time, and totals are returned in one snapshot; a reader failure
+  degrades only the source block. `docs/PILOT_PLAN.md` fixes the 12-feed cohort,
+  the seven-day window, the security and accessibility checks, and the
+  go/no-go rules.
 - Web interface: the same FastAPI service renders a Spanish screen to create a
   report, read its stories with every citation linked to the original URL,
   play the stored audio, and follow the synchronized transcript by segment.
