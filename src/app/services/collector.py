@@ -160,7 +160,15 @@ def normalize_feed(feed: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    """Map a reader entry to the NAF shape, preserving provenance fields."""
+    """Map a reader entry to the NAF shape, preserving provenance fields.
+
+    The three dates are distinct concepts and never interchangeable:
+    ``published_at`` is the date the publisher declares, ``created_at`` is the
+    date the reader first captured the entry, and ``changed_at`` is the last
+    known modification of the entry in the reader. A date the reader does not
+    report is ``None`` with the key still present, so a consumer never has to
+    tell a missing key from a missing value.
+    """
     feed = entry.get("feed") or {}
     return {
         "entry_id": entry.get("id"),
@@ -170,6 +178,7 @@ def normalize_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "author": entry.get("author"),
         "published_at": entry.get("published_at"),
         "created_at": entry.get("created_at"),
+        "changed_at": entry.get("changed_at"),
         "status": entry.get("status"),
         "starred": entry.get("starred", False),
         "content": entry.get("content"),

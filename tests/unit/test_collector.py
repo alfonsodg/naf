@@ -124,6 +124,16 @@ def test_normalize_entry_defaults_the_attachments_and_the_tags() -> None:
     assert normalized["tags"] == []
 
 
+def test_normalize_entry_keeps_the_three_dates_apart() -> None:
+    """The three dates stay distinct; an absent modification is None, never a missing key."""
+    entry = _entry(10, _feed(1, "Alpha"), "2026-10-18T09:00:00Z")
+    entry["created_at"], entry["changed_at"] = "2026-10-18T09:05:00Z", "2026-10-19T11:30:00Z"
+    normalized = normalize_entry(entry)
+    dates = (normalized["published_at"], normalized["created_at"], normalized["changed_at"])
+    assert dates == ("2026-10-18T09:00:00Z", "2026-10-18T09:05:00Z", "2026-10-19T11:30:00Z")
+    assert normalize_entry(_entry(11, _feed(1, "Alpha"), ""))["changed_at"] is None
+
+
 def test_normalize_feed_projects_the_documented_fields() -> None:
     """The feed is projected onto the fields this project defines."""
     normalized = normalize_feed(
