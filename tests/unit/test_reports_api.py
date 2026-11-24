@@ -176,6 +176,27 @@ def test_a_report_is_served_and_stored_with_its_stories(session: Session, wire: 
     assert len(_stored(session).stories) == 1
 
 
+def test_a_raw_reader_entry_is_projected_before_the_generator(session: Session, wire: Callable[..., None]) -> None:
+    """The reader returns its own document; the generator needs the NAF shape."""
+    raw = {
+        "id": 77,
+        "url": "https://beta.test/77",
+        "title": "Entrada cruda",
+        "published_at": "2026-11-23T09:00:00Z",
+        "feed": {"id": 2, "title": "Beta", "feed_url": "https://beta.test/rss", "site_url": "https://beta.test"},
+    }
+    generator = _FakeGenerator()
+    wire(_FakeReader([raw]), generator)
+
+    response = _post({})
+
+    assert response.status_code == 201
+    selected = generator.calls[0]["entries"][0]
+    assert selected["entry_id"] == 77
+    assert selected["feed_title"] == "Beta"
+    assert _stored(session).entry_ids == [77]
+
+
 def test_an_empty_selection_is_stored_as_no_news(session: Session, wire: Callable[..., None]) -> None:
     """No entries produce the explicit Spanish message and no model call."""
     generator = _FakeGenerator()
