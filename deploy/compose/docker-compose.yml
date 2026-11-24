@@ -89,8 +89,16 @@ services:
       NAF_LLM_MAX_OUTPUT_TOKENS: ${NAF_LLM_MAX_OUTPUT_TOKENS:-4000}
       NAF_REPORT_MAX_ENTRIES: ${NAF_REPORT_MAX_ENTRIES:-120}
       NAF_REPORT_DEFAULT_DAYS: ${NAF_REPORT_DEFAULT_DAYS:-7}
+      # Spanish speech for a stored report. The models are mounted read-only
+      # from the host; empty paths disable the audio routes with 503.
+      NAF_TTS_MODEL_PATH: ${NAF_TTS_MODEL_PATH:-/models/kokoro-v1.0.onnx}
+      NAF_TTS_VOICES_PATH: ${NAF_TTS_VOICES_PATH:-/models/voices-v1.0.bin}
+      NAF_TTS_VOICE: ${NAF_TTS_VOICE:-ef_dora}
+      NAF_TTS_SPEED: ${NAF_TTS_SPEED:-1.0}
     volumes:
       - naf-audio:/data/audio
+      # Kokoro ONNX models live on the host; the image carries only the runtime.
+      - ${NAF_MODELS_DIR:-/opt/naf/models}:/models:ro
     ports:
       - "127.0.0.1:${NAF_PORT:?NAF_PORT is required}:8000"
     healthcheck:
