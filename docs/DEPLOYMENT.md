@@ -109,6 +109,11 @@ it, because the container never receives the variable.
 | `NAF_LLM_MAX_OUTPUT_TOKENS` | `6000` | Hard ceiling on the tokens one report may return |
 | `NAF_REPORT_MAX_ENTRIES` | `40` | Largest selection sent to the model; bounds the per-report cost |
 | `NAF_REPORT_DEFAULT_DAYS` | `7` | Window used when a request names neither a period nor `since_last` |
+| `NAF_TTS_MODEL_PATH` | `/models/kokoro-v1.0.onnx` | Kokoro ONNX model; empty disables the audio routes with `503` |
+| `NAF_TTS_VOICES_PATH` | `/models/voices-v1.0.bin` | Voice bank; Spanish voices such as `ef_dora` live here |
+| `NAF_TTS_VOICE` | `ef_dora` | Spanish voice used for synthesis |
+| `NAF_TTS_SPEED` | `1.0` | Speech rate multiplier |
+| `NAF_MODELS_DIR` | `/opt/naf/models` | Host directory mounted read-only at `/models` |
 
 Raise the cap only for a validated source that publishes more than the default,
 and keep the value bounded: it is a memory limit, not a preference.
