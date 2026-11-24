@@ -78,6 +78,20 @@ Verification, once the stack is up:
 - `GET /api/v1/feeds/health` reports the freshness and the parsing errors of
   every feed, which is where a poll that keeps failing becomes visible.
 
+## Database migrations
+
+The runtime image carries `alembic.ini` and the migration scripts under
+`src/app/db/migrations`. The service does not create tables on startup: apply the
+schema before the first start and after every image change that includes a
+migration.
+
+```bash
+docker compose --env-file deploy.env -f deploy/compose/docker-compose.yml run --rm naf alembic upgrade head
+```
+
+The command reads `NAF_DATABASE_URL` from the environment the compose file already
+provides, so no DSN is stored in the image or in `alembic.ini`.
+
 ## Exposure boundary
 
 The MVP has no authentication layer, because it is built for a single private

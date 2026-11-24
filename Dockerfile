@@ -34,6 +34,9 @@ RUN apt-get update \
 
 COPY --from=builder /build/.venv /app/.venv
 COPY --from=builder /build/src /app/src
+# Alembic needs its configuration file next to the migration scripts that src/
+# already carries; the runtime applies the schema before serving.
+COPY alembic.ini ./
 
 # Writable location for generated audio; mounted as a volume in deployments.
 RUN mkdir -p /data/audio && chown -R nobody:nogroup /data/audio
