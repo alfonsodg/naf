@@ -24,6 +24,8 @@ class DigestStory(BaseModel):
     claims: list[str]
     citations: list[Citation]
     pub_type: str | None = None
+    official: bool | None = None
+    uncertainties: list[str] = Field(default_factory=list)
     entities: list[dict[str, Any]] = Field(default_factory=list)
 
 

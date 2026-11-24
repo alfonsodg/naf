@@ -218,6 +218,8 @@ def make_report(
                     }
                 ],
                 pub_type="news",
+                official=True,
+                uncertainties=["No consta la fecha exacta del anuncio."],
                 order_index=0,
             ),
             DigestStory(
@@ -233,6 +235,7 @@ def make_report(
                     }
                 ],
                 pub_type="release",
+                official=False,
                 order_index=1,
             ),
         ]

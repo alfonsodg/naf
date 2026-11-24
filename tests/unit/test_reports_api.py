@@ -97,6 +97,8 @@ class _FakeGenerator:
             claims=["La entrada publica una novedad."],
             citations=[Citation(entry_id=str(first["entry_id"]), entry_url=first["url"], title=first["title"])],
             pub_type="news",
+            official=True,
+            uncertainties=["El alcance no consta en las entradas."],
         )
         return GeneratedDigest(
             title="Radar semanal",
@@ -173,6 +175,11 @@ def test_a_report_is_served_and_stored_with_its_stories(session: Session, wire: 
     detail = client.get(f"/api/v1/reports/{body['report_id']}").json()["data"]
     assert detail["stories"][0]["claims"] == ["La entrada publica una novedad."]
     assert detail["stories"][0]["citations"][0]["entry_id"] == "2"
+    assert detail["stories"][0]["official"] is True
+    assert detail["stories"][0]["uncertainties"] == ["El alcance no consta en las entradas."]
+    stored_story = _stored(session).stories[0]
+    assert stored_story.official is True
+    assert stored_story.uncertainties == ["El alcance no consta en las entradas."]
     assert len(_stored(session).stories) == 1
 
 

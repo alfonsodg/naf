@@ -87,6 +87,13 @@
     <article class="story" id="story-{{ loop.index0 }}" data-story-index="{{ loop.index0 }}">
       <h3>{{ story.title }}</h3>
       {% if story.pub_type %}<p class="eyebrow">{{ story.pub_type }}</p>{% endif %}
+      {% if story.official is not none %}
+      <p class="story__source">
+        <span class="badge badge--{{ 'official' if story.official else 'thirdparty' }}">
+          <span class="visually-hidden">Tipo de fuente: </span>{{ "Oficial" if story.official else "Terceros" }}
+        </span>
+      </p>
+      {% endif %}
       {% if story.summary %}<p>{{ story.summary }}</p>{% endif %}
       {% if story.claims %}
       <h4>Afirmaciones</h4>
@@ -103,6 +110,12 @@
         </li>
         {% endfor %}
       </ul>
+      {% endif %}
+      {% if story.uncertainties %}
+      <section class="uncertainties" aria-labelledby="incertidumbres-{{ loop.index0 }}">
+        <h4 id="incertidumbres-{{ loop.index0 }}">Incertidumbres</h4>
+        <ul>{% for uncertainty in story.uncertainties %}<li>{{ uncertainty }}</li>{% endfor %}</ul>
+      </section>
       {% endif %}
       {% if asset and segments %}
       <button type="button" class="link-button" data-story-seek="{{ loop.index0 }}" hidden>Escuchar esta historia</button>
