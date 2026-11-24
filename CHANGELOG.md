@@ -118,6 +118,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- The reader's browser-facing address is a deployment value
+  (`NAF_MINIFLUX_BASE_URL`), so a published host does not need an SSH tunnel and a
+  local stack keeps `http://localhost:8080` by default.
 - The entry routes moved to `src/app/routers/entries.py`; every URL path and
   response shape is unchanged.
 - The reader polls every 20 minutes with the `round_robin` scheduler and 50

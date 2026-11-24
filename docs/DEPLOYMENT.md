@@ -47,6 +47,21 @@ reverse proxy resolve them by DNS name; renaming breaks the deployment.
   points at the `miniflux` service of the compose stack.
 - Neither database is exposed outside the internal network.
 
+## Reader base URL
+
+`NAF_MINIFLUX_BASE_URL` is the address a browser uses to reach the reader. Miniflux
+builds its links and session cookies from it, so it must match the published host and
+port, not the internal service name. The internal API stays on `http://miniflux:8080`
+through `NAF_MINIFLUX_URL`.
+
+| Deployment | `NAF_MINIFLUX_BASE_URL` |
+| --- | --- |
+| Local compose | `http://localhost:8080` (default) |
+| Sandbox, published port 18081 | `http://<host-address>:18081` |
+
+The NAF API keeps its own loopback publication: publishing the reader does not publish
+the API, which has no authentication layer.
+
 ## Reader polling cadence
 
 Polling follows decision 4: a feed is polled every 15 to 30 minutes. The
