@@ -229,9 +229,17 @@ async def import_opml(opml: Annotated[str, Body(media_type="text/xml")]) -> dict
 
 
 @router.post("/collect")
-async def collect(session: SessionDep, limit: LimitQuery = 100) -> dict[str, Any]:
-    """Run one ingestion pass with per-feed failure isolation."""
+async def collect(
+    session: SessionDep,
+    limit: LimitQuery = 100,
+    since: datetime | None = None,
+) -> dict[str, Any]:
+    """Run one ingestion pass with per-feed failure isolation.
+
+    ``since`` narrows the pass to entries published at or after the cutoff. A
+    timestamp without a zone is read as UTC, and an undated entry is kept.
+    """
     try:
-        return {"data": await _collector(session).collect(limit=limit)}
+        return {"data": await _collector(session).collect(limit=limit, since=_utc(since))}
     except MinifluxAPIError as exc:
         raise _unavailable(exc) from exc

@@ -300,6 +300,54 @@ def test_collect_reports_the_ingestion_run() -> None:
     assert body["ingestion_run_id"] == 1
 
 
+def test_the_collect_cutoff_reaches_the_collector() -> None:
+    """A cutoff without a zone is read as UTC and forwarded to the collector."""
+    captured: dict[str, Any] = {}
+
+    async def collect(self: Any, limit: int = 100, since: datetime | None = None) -> dict[str, Any]:
+        captured.update({"limit": limit, "since": since})
+        return {}
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.Collector, "collect", collect)
+        response = client.post("/api/v1/collect", params={"limit": 10, "since": "2026-10-01T00:00:00"})
+
+    assert response.status_code == 200
+    assert captured == {"limit": 10, "since": datetime(2026, 10, 1, tzinfo=UTC)}
+
+
+def test_a_zoned_collect_cutoff_is_normalised_to_utc() -> None:
+    """A cutoff carrying an offset is forwarded as the same UTC instant."""
+    captured: dict[str, Any] = {}
+
+    async def collect(self: Any, limit: int = 100, since: datetime | None = None) -> dict[str, Any]:
+        captured.update({"limit": limit, "since": since})
+        return {}
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.Collector, "collect", collect)
+        response = client.post("/api/v1/collect", params={"since": "2026-10-01T02:00:00+02:00"})
+
+    assert response.status_code == 200
+    assert captured["since"] == datetime(2026, 10, 1, tzinfo=UTC)
+
+
+def test_collect_without_a_cutoff_runs_a_full_pass() -> None:
+    """An absent cutoff preserves the current full-pass behaviour."""
+    captured: dict[str, Any] = {}
+
+    async def collect(self: Any, limit: int = 100, since: datetime | None = None) -> dict[str, Any]:
+        captured.update({"limit": limit, "since": since})
+        return {}
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(feeds.Collector, "collect", collect)
+        response = client.post("/api/v1/collect")
+
+    assert response.status_code == 200
+    assert captured["since"] is None
+
+
 def test_reader_failure_returns_502_for_every_endpoint() -> None:
     """Reader outages translate to the documented envelope on all routes."""
     from app.core.exceptions import MinifluxAPIError
