@@ -7,7 +7,7 @@ classification suite imports the same reader, classifier, and settings builder.
 from typing import Any
 
 from app.core.config import Settings
-from app.core.exceptions import MinifluxAPIError
+from app.core.exceptions import ClassificationError, MinifluxAPIError
 from app.core.ports.classifier import Classifier
 from app.schemas.classification import Classification, ModelMention
 
@@ -20,6 +20,17 @@ ENTRY: dict[str, Any] = {
     "tags": [{"id": 3, "name": "modelos"}],
     "feed": {"id": 1, "title": "Blog del equipo X", "feed_url": "https://creator.test/rss"},
 }
+
+
+def entry(entry_id: int) -> dict[str, Any]:
+    """Build one reader entry with a distinct identifier for batch tests."""
+    return {
+        **ENTRY,
+        "id": entry_id,
+        "url": f"https://creator.test/entry-{entry_id}",
+        "title": f"Entrada {entry_id}",
+        "published_at": f"2026-11-{entry_id + 10:02d}T10:00:00Z",
+    }
 
 
 def settings_with(**overrides: Any) -> Settings:
@@ -35,19 +46,29 @@ def settings_with(**overrides: Any) -> Settings:
 
 
 class FakeReader:
-    """Reader double that returns one entry or reports it as unknown."""
+    """Reader double that serves a newest-first page and reports unknown entries."""
 
-    def __init__(self, missing: bool = False) -> None:
+    def __init__(self, missing: bool = False, entries: list[dict[str, Any]] | None = None) -> None:
         self.missing = missing
-        self.entry = ENTRY
+        self.entries = entries if entries is not None else [ENTRY]
+        self.entry = self.entries[0] if self.entries else ENTRY
         self.calls: list[int] = []
+        self.list_calls: list[int] = []
+
+    async def get_entries(self, limit: int = 100, **_: Any) -> list[dict[str, Any]]:
+        """Return the configured newest entries, bounded like the reader API."""
+        self.list_calls.append(limit)
+        return list(self.entries[:limit])
 
     async def get_entry(self, entry_id: int) -> dict[str, Any]:
-        """Return the stored entry or the reader's 404."""
+        """Return the matching entry or the reader's 404."""
         self.calls.append(entry_id)
         if self.missing:
             raise MinifluxAPIError(f"Miniflux /v1/entries/{entry_id} returned 404", status_code=404)
-        return self.entry
+        for candidate in self.entries:
+            if candidate.get("id") == entry_id:
+                return candidate
+        raise MinifluxAPIError(f"Miniflux /v1/entries/{entry_id} returned 404", status_code=404)
 
 
 class FakeClassifier(Classifier):
@@ -56,6 +77,7 @@ class FakeClassifier(Classifier):
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self.error: Exception | None = None
+        self.fail_on: set[int] = set()
 
     @property
     def model(self) -> str:
@@ -67,6 +89,8 @@ class FakeClassifier(Classifier):
         self.calls.append(item)
         if self.error is not None:
             raise self.error
+        if item.get("entry_id") in self.fail_on:
+            raise ClassificationError(f"the provider refused entry {item.get('entry_id')}")
         return Classification(
             category="Tecnología y software",
             categories=["Tecnología y software", "IA y modelos"],

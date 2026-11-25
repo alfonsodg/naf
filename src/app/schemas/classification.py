@@ -177,6 +177,35 @@ class ClassificationListResponse(BaseModel):
     pagination: ClassificationPagination
 
 
+class ClassificationBatchRequest(BaseModel):
+    """Bounded batch: how many pending entries the pass may classify."""
+
+    limit: int = Field(ge=1, le=20, description="Largest number of pending entries to classify")
+
+
+class ClassificationBatchResponse(BaseModel):
+    """What one bounded pass completed and why it stopped, if it did."""
+
+    classified: int = Field(ge=0, description="Entries classified before the pass finished or stopped")
+    entry_ids: list[int] = Field(default_factory=list, description="Reader identifiers classified in this pass")
+    scanned: int = Field(ge=0, description="Newest reader entries inspected while looking for the backlog")
+    data: list[ClassificationView] = Field(
+        default_factory=list,
+        description="Stored classifications completed before the pass finished or stopped",
+    )
+    stopped_reason: str | None = Field(
+        default=None,
+        description="Spanish reason when a provider or reader failure stopped the pass early",
+    )
+
+
+class ClassificationPendingResponse(BaseModel):
+    """How many of the newest reader entries still lack a classification."""
+
+    scanned: int = Field(ge=0, description="Newest reader entries inspected")
+    pending: int = Field(ge=0, description="Entries among those inspected that have no stored classification")
+
+
 def _utc(value: datetime) -> datetime:
     """Read a stored naive instant as UTC and normalise an aware one."""
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)

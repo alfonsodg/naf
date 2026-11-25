@@ -12,6 +12,7 @@ from typing import Any, NamedTuple, cast
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import ClassificationError, MinifluxAPIError
 from app.core.ports.classifier import Classifier
 from app.core.ports.feed_reader import FeedReader
 from app.models import EntryClassification, EntryModelMention
@@ -19,8 +20,13 @@ from app.schemas.classification import Classification, ClassificationCorrection,
 from app.services.collector import normalize_entry
 
 PRESERVED_NOTICE = "La corrección del usuario se conserva; no se volvió a clasificar la entrada."
+PROVIDER_STOPPED = "El proveedor del modelo falló; se detuvo el lote y se conservaron las entradas ya clasificadas."
+READER_STOPPED = (
+    "No se pudo leer una entrada del lector; se detuvo el lote y se conservaron las clasificaciones ya guardadas."
+)
 AUTO_VALUES_HEADER = "Valores automáticos originales:"
 CORRECTABLE_FIELDS = ("category", "categories", "tags", "pub_type")
+BATCH_SCAN_LIMIT = 100
 
 
 class ClassificationOutcome(NamedTuple):
@@ -29,6 +35,26 @@ class ClassificationOutcome(NamedTuple):
     classification: EntryClassification
     models: list[EntryModelMention]
     preserved: bool = False
+
+
+class BatchOutcome(NamedTuple):
+    """One bounded pass: what it classified, how far it scanned, and why it stopped."""
+
+    outcomes: list[ClassificationOutcome]
+    scanned: int
+    stopped_reason: str | None = None
+
+    @property
+    def entry_ids(self) -> list[int]:
+        """Return the reader identifiers classified in the pass, in order."""
+        return [cast(int, outcome.classification.entry_id) for outcome in self.outcomes]
+
+
+class PendingOutcome(NamedTuple):
+    """How many of the newest entries still need a classification."""
+
+    scanned: int
+    pending: int
 
 
 class ClassificationService:
@@ -95,6 +121,42 @@ class ClassificationService:
             return None
         return ClassificationOutcome(row, self._mentions(entry_id))
 
+    async def pending(self, limit: int) -> PendingOutcome:
+        """Count the newest reader entries that have no stored classification.
+
+        The scan is bounded by ``limit``: the caller asks how large the backlog
+        is near the newest entries, not how many entries the reader holds.
+        """
+        entries = await self.reader.get_entries(limit=limit)
+        entry_ids = _entry_ids(entries)
+        stored = self._stored_ids(entry_ids)
+        return PendingOutcome(
+            scanned=len(entry_ids), pending=sum(1 for entry_id in entry_ids if entry_id not in stored)
+        )
+
+    async def run_batch(self, limit: int) -> BatchOutcome:
+        """Classify up to ``limit`` of the newest unclassified entries, in order.
+
+        The pass scans a bounded window of the reader, skips every entry that
+        already has a stored classification (including a user correction), and
+        stops on the first provider or reader failure without discarding what it
+        already committed. A corrected row is never read by this path, so it
+        cannot be overwritten.
+        """
+        entries = await self.reader.get_entries(limit=BATCH_SCAN_LIMIT)
+        entry_ids = _entry_ids(entries)
+        stored = self._stored_ids(entry_ids)
+        candidates = [entry_id for entry_id in entry_ids if entry_id not in stored][:limit]
+        completed: list[ClassificationOutcome] = []
+        for entry_id in candidates:
+            try:
+                completed.append(await self.classify(entry_id))
+            except ClassificationError:
+                return BatchOutcome(completed, len(entry_ids), PROVIDER_STOPPED)
+            except MinifluxAPIError:
+                return BatchOutcome(completed, len(entry_ids), READER_STOPPED)
+        return BatchOutcome(completed, len(entry_ids))
+
     def list_review(
         self, review_needed: bool | None, page: int, per_page: int
     ) -> tuple[list[EntryClassification], int]:
@@ -120,6 +182,24 @@ class ClassificationService:
         statement = select(EntryClassification).where(EntryClassification.entry_id == entry_id)
         return self.session.execute(statement).scalar_one_or_none()
 
+    def _stored_ids(self, entry_ids: list[int]) -> set[int]:
+        """Return which of the given entries already have a stored classification.
+
+        A user-corrected row counts as classified: the batch must leave it
+        untouched instead of asking the model about it again.
+        """
+        if not entry_ids:
+            return set()
+        rows = cast(
+            "list[int]",
+            list(
+                self.session.execute(
+                    select(EntryClassification.entry_id).where(EntryClassification.entry_id.in_(entry_ids))
+                ).scalars()
+            ),
+        )
+        return {int(stored) for stored in rows}
+
     def _mentions(self, entry_id: int) -> list[EntryModelMention]:
         """Return the stored model mentions of one entry in insertion order."""
         statement = (
@@ -131,6 +211,11 @@ class ClassificationService:
         """Replace every mention of one entry with the new answer."""
         self.session.execute(delete(EntryModelMention).where(EntryModelMention.entry_id == entry_id))
         self.session.add_all([_mention_row(entry_id, mention) for mention in mentions])
+
+
+def _entry_ids(entries: list[dict[str, Any]]) -> list[int]:
+    """Read the reader identifiers of one page, dropping malformed entries."""
+    return [int(entry["id"]) for entry in entries if entry.get("id") is not None]
 
 
 def _apply(row: EntryClassification, result: Classification) -> None:

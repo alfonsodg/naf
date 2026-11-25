@@ -13,10 +13,12 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from app.adapters.llm.classifier import LLMClassifier
 from app.adapters.miniflux.client import MinifluxClient
 from app.adapters.storage.local import LocalAudioStorage
 from app.core.config import settings as app_settings
 from app.core.exceptions import CitationValidationError, MinifluxAPIError, ReportGenerationError, TTSError
+from app.core.ports.classifier import Classifier
 from app.core.ports.feed_reader import FeedReader
 from app.core.ports.report_generator import ReportGenerator
 from app.core.ports.storage import AudioStorage
@@ -24,7 +26,9 @@ from app.core.ports.tts import TTSProvider
 from app.db.session import get_session
 from app.routers.ui_support import (
     FormError,
+    batch_limit,
     empty_form,
+    field,
     form_state,
     index_context,
     not_found,
@@ -36,6 +40,7 @@ from app.routers.ui_support import (
 )
 from app.schemas.reports import ReportDetail
 from app.services.audio import AudioService
+from app.services.classification import ClassificationService
 from app.services.collector import normalize_feed
 from app.services.feed_folders import FeedFolderStore
 from app.services.reporting import ReportService
@@ -52,11 +57,27 @@ ERRORS = {
 GENERATION_ERROR = "No se pudo generar el informe. Inténtalo de nuevo más tarde."
 READER_ERROR = "No se pudo consultar el lector de fuentes. Comprueba que Miniflux esté disponible."
 CITATIONS_ERROR = "El informe generado no tiene una fuente válida para cada afirmación. No se ha publicado."
+CLASSIFICATION_ERROR = (
+    "No se pudo completar la clasificación de novedades: el proveedor del modelo no respondió. "
+    "Las entradas ya clasificadas se conservaron y puedes volver a intentarlo."
+)
+SOURCE_ERRORS = {
+    "classify": CLASSIFICATION_ERROR,
+    "classify-config": "La clasificación no está configurada: falta un modelo de lenguaje en este despliegue.",
+    "classify-limit": "Indica cuántas novedades clasificar, entre 1 y 20.",
+    "classify-reader": "No se pudo leer el lote de novedades del lector de fuentes. "
+    "Comprueba que Miniflux esté disponible y vuelve a intentarlo.",
+}
 
 
 def _reader() -> FeedReader:
     """Build the reader adapter for one request."""
     return MinifluxClient()
+
+
+def _classifier() -> Classifier:
+    """Build the classifier through the LLM adapter for one request."""
+    return LLMClassifier(app_settings)
 
 
 def _generator() -> ReportGenerator:
@@ -168,14 +189,52 @@ async def sources(request: Request, session: SessionDep) -> Response:
     single category per feed. They are the same names the entry filter accepts,
     so the user sees what the filter will select.
     """
+    notice, error = _source_message(request)
     try:
         feeds = [normalize_feed(feed) for feed in await _reader().list_feeds()]
     except MinifluxAPIError:
-        return render(request, "sources.html", {"feeds": [], "error": READER_ERROR}, status_code=502)
+        return render(
+            request, "sources.html", {"feeds": [], "notice": notice, "error": error or READER_ERROR}, status_code=502
+        )
     folders = _folders_by_url(FeedFolderStore(session).list_folders())
     for feed in feeds:
         feed["folders"] = folders.get(feed["url"], [])
-    return render(request, "sources.html", {"feeds": feeds, "error": None})
+    return render(request, "sources.html", {"feeds": feeds, "notice": notice, "error": error})
+
+
+@router.post("/ui/classify", response_model=None)
+async def classify_backlog(request: Request, session: SessionDep) -> Response:
+    """Classify the newest unclassified entries and return to the sources page."""
+    form = await request.form()
+    try:
+        limit = batch_limit(field(form, "limit"))
+    except FormError:
+        return _sources_redirect("error=classify-limit")
+    if not app_settings.llm_model:
+        return _sources_redirect("error=classify-config")
+    try:
+        outcome = await ClassificationService(session, _reader(), _classifier()).run_batch(limit)
+    except MinifluxAPIError:
+        return _sources_redirect("error=classify-reader")
+    classified = len(outcome.outcomes)
+    if outcome.stopped_reason is not None:
+        return _sources_redirect(f"error=classify&classified={classified}")
+    return _sources_redirect(f"notice=classified&classified={classified}")
+
+
+def _source_message(request: Request) -> tuple[str | None, str | None]:
+    """Translate the fixed notice and error codes the sources page may carry."""
+    notice: str | None = None
+    if request.query_params.get("notice") == "classified":
+        count = _classified_count(request.query_params.get("classified"))
+        notice = f"Se clasificaron {count} novedades." if count > 0 else "No había novedades pendientes de clasificar."
+    code = request.query_params.get("error", "")
+    error = SOURCE_ERRORS.get(code)
+    if code == "classify":
+        count = _classified_count(request.query_params.get("classified"))
+        if count > 0:
+            error = f"Se clasificaron {count} novedades antes del fallo. {CLASSIFICATION_ERROR}"
+    return notice, error
 
 
 def _folders_by_url(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -184,6 +243,19 @@ def _folders_by_url(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
     for row in rows:
         grouped.setdefault(str(row["feed_url"]), []).append(str(row["folder"]))
     return grouped
+
+
+def _classified_count(value: str | None) -> int:
+    """Read how many entries a redirect reports as classified."""
+    try:
+        return max(0, int(value or "0"))
+    except ValueError:
+        return 0
+
+
+def _sources_redirect(query: str) -> RedirectResponse:
+    """Return to the sources page carrying one fixed notice or error code."""
+    return RedirectResponse(f"/sources?{query}", status_code=303)
 
 
 def _redirect(report_id: int, query: str) -> RedirectResponse:

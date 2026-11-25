@@ -6,7 +6,21 @@
   <p>Las fuentes las administra Miniflux; aquí se consultan con su categoría, sus carpetas guardadas por la importación y su última lectura. Esas carpetas son las que puedes usar como filtro.</p>
 </div>
 
+{% if notice %}<p class="alert alert--ok" role="status">{{ notice }}</p>{% endif %}
 {% if error %}<p class="alert alert--error" role="alert">{{ error }} <a href="/sources">Volver a intentarlo</a>.</p>{% endif %}
+
+<section class="card" aria-labelledby="clasificar">
+  <h2 id="clasificar">Clasificar novedades</h2>
+  <p>Clasifica las entradas más recientes que todavía no tienen categoría ni etiquetas sugeridas. Las correcciones del usuario nunca se sobrescriben.</p>
+  <form method="post" action="/ui/classify" class="form">
+    <div class="field">
+      <label for="limit">Cantidad</label>
+      <input type="number" id="limit" name="limit" min="1" max="20" value="5" inputmode="numeric">
+      <p class="hint">Entre 1 y 20 entradas por pasada.</p>
+    </div>
+    <button type="submit" class="button">Clasificar novedades</button>
+  </form>
+</section>
 
 {% if feeds %}
 <div class="table-wrap">

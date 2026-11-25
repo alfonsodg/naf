@@ -9,6 +9,7 @@ rows and the values the user typed.
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
 from fastapi.responses import Response
@@ -17,6 +18,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
+from app.core.config import settings as app_settings
+from app.core.logging import get_logger
 from app.models import Digest
 from app.schemas.reports import ReportCreateRequest, ReportStory, ReportSummary
 from app.services.audio import AudioService
@@ -26,7 +29,10 @@ ASSET_DIR = Path(__file__).resolve().parent.parent
 STATUS_LABELS = {"draft": "Borrador", "ready": "Listo", "no_news": "Sin novedades", "failed": "Fallido"}
 FORM_FIELDS = ("period_start", "period_end", "max_entries", "tags", "search", "since_last")
 HISTORY_LIMIT = 50
+BATCH_MAX_LIMIT = 20
+FALLBACK_TIMEZONE = "UTC"
 
+logger = get_logger(__name__)
 templates = Jinja2Templates(directory=str(ASSET_DIR / "templates"))
 
 
@@ -134,6 +140,17 @@ def max_entries(value: str) -> int | None:
     return limit
 
 
+def batch_limit(value: str) -> int:
+    """Read how many pending entries to classify, bounded by the batch contract."""
+    try:
+        limit = int(value)
+    except ValueError as exc:
+        raise FormError(f"Indica cuántas novedades clasificar, entre 1 y {BATCH_MAX_LIMIT}.") from exc
+    if not 1 <= limit <= BATCH_MAX_LIMIT:
+        raise FormError(f"La cantidad de novedades debe estar entre 1 y {BATCH_MAX_LIMIT}.")
+    return limit
+
+
 def stored_segments(session: Session, report_id: int) -> object:
     """Read the segment list stored with the newest asset of one edition."""
     asset = AudioService.latest_asset(session, report_id)
@@ -166,12 +183,23 @@ def segments(value: object, stories: list[ReportStory]) -> list[dict[str, Any]]:
     return result
 
 
-def format_instant(value: datetime | None) -> str:
-    """Render a stored instant as UTC so a period is never ambiguous."""
+def display_zone(name: str | None = None) -> ZoneInfo:
+    """Resolve the configured IANA zone, falling back to UTC with a warning."""
+    candidate = name or app_settings.display_timezone or FALLBACK_TIMEZONE
+    try:
+        return ZoneInfo(candidate)
+    except (ZoneInfoNotFoundError, ValueError):
+        logger.warning("unknown display timezone; using UTC", extra={"timezone": candidate})
+        return ZoneInfo(FALLBACK_TIMEZONE)
+
+
+def format_instant(value: datetime | None, timezone: str | None = None) -> str:
+    """Render a stored UTC instant in the display zone, naming the offset used."""
     if value is None:
         return "Sin datos"
     moment = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-    return moment.strftime("%d/%m/%Y %H:%M") + " UTC"
+    local = moment.astimezone(display_zone(timezone))
+    return local.strftime("%d/%m/%Y %H:%M") + f" {local.tzname() or FALLBACK_TIMEZONE}"
 
 
 def format_seconds(value: float) -> str:
