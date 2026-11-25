@@ -31,11 +31,7 @@ class MaintenanceService:
 
     def _old_editions(self, cutoff: datetime) -> list[Digest]:
         """Return the editions created before the cutoff, oldest first."""
-        statement = (
-            select(Digest)
-
-            .order_by(Digest.created_at.asc())
-        )
+        statement = select(Digest).where(Digest.created_at < cutoff).order_by(Digest.created_at.asc())
         return list(self.session.execute(statement).scalars().all())
 
     def _assets(self, digest: Digest) -> list[AudioAsset]:

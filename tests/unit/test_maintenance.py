@@ -89,11 +89,12 @@ def _edition(session: Session, created: datetime, *, audio: bool = False) -> Dig
 def test_the_preview_lists_only_editions_older_than_the_window(session: Session, storage: FakeStorage) -> None:
     """A recent edition is never proposed for deletion."""
     old = _edition(session, datetime.utcnow() - timedelta(days=120), audio=True)
-    _edition(session, datetime.utcnow() - timedelta(days=10), audio=True)
+    recent = _edition(session, datetime.utcnow() - timedelta(days=10), audio=True)
 
     body = client.get("/api/v1/maintenance/editions", params={"days": 90}).json()["data"]
 
     assert body["editions"] == [old.id]
+    assert recent.id not in body["editions"]
     assert body["bytes"] == 2048
     assert body["filenames"] == [f"report-{old.id}.wav"]
 
