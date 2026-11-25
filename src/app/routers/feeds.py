@@ -208,6 +208,16 @@ async def list_feed_folders(session: SessionDep) -> dict[str, Any]:
     return {"data": FeedFolderStore(session).list_folders()}
 
 
+@router.get("/folders")
+async def list_folders(session: SessionDep) -> dict[str, Any]:
+    """List the distinct stored folders with the number of feeds in each.
+
+    This is the selector the entry list and the report selection consume; the
+    per-feed register keeps its own shape in ``GET /feeds/folders``.
+    """
+    return {"data": FeedFolderStore(session).folder_counts()}
+
+
 @router.get("/opml/export")
 async def export_opml() -> dict[str, Any]:
     """Export subscriptions as OPML for portability.

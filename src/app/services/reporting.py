@@ -20,6 +20,7 @@ from app.core.ports.report_generator import ReportGenerator
 from app.models import Digest, DigestStory
 from app.schemas.digest import Digest as GeneratedDigest
 from app.schemas.reports import ReportCreateRequest
+from app.services.feed_folders import FeedFolderStore
 from app.services.relations import persist_report_relations
 from app.services.report_selection import published_at, select_entries, utc
 
@@ -58,7 +59,14 @@ class ReportService:
         period = self._period(request)
         filters = _filters(request)
         limit = min(request.max_entries or self.settings.report_max_entries, self.settings.report_max_entries)
-        entries = await select_entries(self.reader, request, period.start, period.end, limit)
+        entries = await select_entries(
+            self.reader,
+            request,
+            period.start,
+            period.end,
+            limit,
+            FeedFolderStore(self.session),
+        )
         if not entries:
             return self._store_no_news(period, filters)
         try:
@@ -226,6 +234,7 @@ def _filters(request: ReportCreateRequest) -> dict[str, Any]:
     """Record the effective request filters for reproducibility."""
     return {
         "feed_ids": request.feed_ids,
+        "folders": request.folders,
         "category_ids": request.category_ids,
         "tags": request.tags,
         "search": request.search,

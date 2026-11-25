@@ -30,6 +30,7 @@ from app.db.session import get_session
 from app.main import app
 from app.models import AudioAsset, Digest
 from app.routers import ui
+from app.services.feed_folders import FeedFolderStore
 
 client = TestClient(app)
 
@@ -252,6 +253,23 @@ def test_sources_render_the_feeds_with_category_and_last_check(session: Session,
     assert "https://openai.test/rss" in response.text
     assert "2026-11-24T10:00:00Z" in response.text
     assert "Activa" in response.text
+
+
+def test_sources_show_the_stored_folders(session: Session, wire: Callable[..., None]) -> None:
+    """The sources page names the folders the entry filter can select."""
+    feeds = [
+        {"id": 1, "title": "OpenAI", "feed_url": "https://openai.test/rss", "category": {"id": 1, "title": "IA"}},
+        {"id": 2, "title": "Beta", "feed_url": "https://beta.test/rss", "disabled": True},
+    ]
+    FeedFolderStore(session).record("https://openai.test/rss", ["Tech", "AI"])
+    wire(FakeReader(feeds=feeds), FakeGenerator())
+
+    response = client.get("/sources")
+
+    assert response.status_code == 200
+    assert "Carpetas" in response.text
+    assert "AI, Tech" in response.text
+    assert "Sin carpetas" in response.text
 
 
 def test_a_reader_failure_renders_a_message(session: Session, wire: Callable[..., None]) -> None:

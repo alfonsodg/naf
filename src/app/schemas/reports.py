@@ -23,12 +23,19 @@ class ReportCreateRequest(BaseModel):
     ``since_last`` resolves the period from the newest saved cursor and ignores
     the explicit period. Otherwise a period is used as given, and a request that
     names no period falls back to the configured default window.
+
+    ``feed_ids`` wins over ``folders``, which wins over ``category_ids``: the
+    narrower selection is the one the reader receives.
     """
 
     period_start: datetime | None = Field(default=None, description="Start of the selection period, read as UTC")
     period_end: datetime | None = Field(default=None, description="End of the selection period, read as UTC")
     since_last: bool = Field(default=False, description="Select only entries published after the newest cursor")
     feed_ids: list[int] = Field(default_factory=list, description="Feeds to read; empty selects every feed")
+    folders: list[str] = Field(
+        default_factory=list,
+        description="Stored folders to read when no feed is named; an unknown folder selects nothing",
+    )
     category_ids: list[int] = Field(default_factory=list, description="Categories to read when no feed is named")
     tags: list[str] | None = Field(default=None, description="Tags the reader requires all of")
     search: str | None = Field(default=None, description="Reader full-text query")

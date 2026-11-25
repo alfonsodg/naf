@@ -242,13 +242,20 @@ deprecated. The import is used for one case only, a feed whose host refuses
 automated clients, where storing the subscription without downloading it is the
 whole point.
 
-**One feed, one applied category.** The reader holds a single category per
-feed, so a feed found under several folders is applied to the first one and
-the rest are only reported. The report names the applied category and the
-reported folders separately, so it never claims an organisation the reader does
-not have. The reported folders are NAF-owned data, kept in `feed_folders` and
-readable through `GET /api/v1/feeds/folders`, because they are the only trace
-of the tags the user had.
+**One feed, one applied category, many selectable folders.** The reader holds a
+single category per feed, so a feed found under several folders is applied to
+the first one and the rest are kept in the NAF record. The report names the
+applied category and the reported folders separately, so it never claims an
+organisation the reader does not have. The stored folders are a navigation
+dimension, not provenance metadata: `GET /api/v1/folders` lists them with their
+feed count, `GET /api/v1/entries?folder=...` selects the entries of their feeds,
+and `POST /api/v1/reports` accepts `folders` when no feed is named. The selector
+resolves the stored feed URL to the reader's feed identifier through one
+`list_feeds()` call, so it needs no schema change and never touches the category
+the reader applied. A feed kept under two requested folders is read once, an
+unknown folder selects nothing instead of failing, and the entry list merges,
+deduplicates, orders, and paginates in NAF because the reader can only page one
+feed at a time.
 
 **Intake stays inside the request budget.** A global limit bounds the probes
 of one batch and a second limit bounds the probes against a single host, so a
