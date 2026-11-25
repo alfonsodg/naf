@@ -37,6 +37,7 @@ from app.routers.ui_support import (
 from app.schemas.reports import ReportDetail
 from app.services.audio import AudioService
 from app.services.collector import normalize_feed
+from app.services.feed_folders import FeedFolderStore
 from app.services.reporting import ReportService
 
 router = APIRouter()
@@ -160,13 +161,29 @@ async def generate_audio(report_id: int, request: Request, session: SessionDep) 
 
 
 @router.get("/sources", response_model=None)
-async def sources(request: Request) -> Response:
-    """List the configured feeds with their category and last check."""
+async def sources(request: Request, session: SessionDep) -> Response:
+    """List the configured feeds with their category, stored folders, and last check.
+
+    The folders come from the NAF record, not from the reader, which holds a
+    single category per feed. They are the same names the entry filter accepts,
+    so the user sees what the filter will select.
+    """
     try:
         feeds = [normalize_feed(feed) for feed in await _reader().list_feeds()]
     except MinifluxAPIError:
         return render(request, "sources.html", {"feeds": [], "error": READER_ERROR}, status_code=502)
+    folders = _folders_by_url(FeedFolderStore(session).list_folders())
+    for feed in feeds:
+        feed["folders"] = folders.get(feed["url"], [])
     return render(request, "sources.html", {"feeds": feeds, "error": None})
+
+
+def _folders_by_url(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Group the stored folder rows by the feed URL they belong to."""
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["feed_url"]), []).append(str(row["folder"]))
+    return grouped
 
 
 def _redirect(report_id: int, query: str) -> RedirectResponse:

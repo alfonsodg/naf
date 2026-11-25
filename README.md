@@ -148,19 +148,20 @@ metadata; errors use the documented envelope
 | `GET` | `/api/v1/feeds` | List feeds with health metadata |
 | `GET` | `/api/v1/feeds/health` | Freshness and parsing status per feed |
 | `GET` | `/api/v1/feeds/folders` | Folders found for the feeds, besides the applied category |
+| `GET` | `/api/v1/folders` | Distinct stored folders with the number of feeds in each |
 | `POST` | `/api/v1/feeds` | Validate and add one feed, optionally into a category |
 | `PATCH` | `/api/v1/feeds/{id}` | Rename, move to another category, or pause a feed |
 | `DELETE` | `/api/v1/feeds/{id}` | Remove one subscription and, with it, its entries |
 | `POST` | `/api/v1/feeds/{id}/refresh` | Ask the reader to poll one feed now |
 | `POST` | `/api/v1/feeds/intake` | Validate and add feeds from a URL list or an OPML export |
 | `GET` | `/api/v1/categories` | List reader categories |
-| `GET` | `/api/v1/entries` | List entries with filters, tags, publication period, and pagination |
+| `GET` | `/api/v1/entries` | List entries with filters, folders, tags, publication period, and pagination |
 | `GET` | `/api/v1/entries/{id}` | Read one entry with its attachments and tags |
 | `PATCH` | `/api/v1/entries/{id}` | Set read or unread status |
 | `GET` | `/api/v1/opml/export` | Export subscriptions as OPML |
 | `POST` | `/api/v1/opml/import` | Deprecated: stores the OPML without validating its feeds |
 | `POST` | `/api/v1/collect` | Run one pass, optionally from a publication cutoff |
-| `POST` | `/api/v1/reports` | Generate and store one cited report |
+| `POST` | `/api/v1/reports` | Generate and store one cited report, selecting feeds, folders, or categories |
 | `GET` | `/api/v1/reports` | List the stored reports, newest first |
 | `GET` | `/api/v1/reports/{report_id}` | One report with its stories and citations |
 | `GET` | `/api/v1/ingestion-runs` | List recorded passes with an optional status filter |
@@ -184,6 +185,15 @@ folders that were only found in the source document. The reader holds one
 category per feed, so the extra folders are kept in the NAF database and can be
 read from `GET /api/v1/feeds/folders`.
 
+The stored folders are also a filter, not only provenance. `GET /api/v1/folders`
+lists them with their feed count, `GET /api/v1/entries` accepts a repeated
+`folder` parameter beside the existing filters, and `POST /api/v1/reports`
+accepts `folders` when no feed is named. The selector maps the stored feed URL
+to the reader feed identifier with one `list_feeds()` call, so it never changes
+the category the reader applied. A feed kept under two requested folders is read
+once, an unknown folder answers an empty page, and the entry list paginates in
+NAF after merging and ordering the feeds of the folder.
+
 The repository ships a curated pack in `feeds/alfonso-articles.opml`: 18
 validated feeds whose approved taxonomy is already in the outline trail, so the
 import applies the organisation instead of adding flat subscriptions.
@@ -205,6 +215,12 @@ The same route accepts `tags` as a repeated parameter, one tag per occurrence.
 The reader combines them with AND, so every added tag narrows the list and an
 entry must carry all of them; a request without `tags` applies no tag filter.
 Send `?tags=security&tags=ai` to read the entries tagged with both.
+
+The same route accepts `folder` as a repeated parameter. Each name is resolved
+through the NAF-owned folders stored by the intake, never through the reader's
+single category, so `?folder=Tech&folder=AI` selects the union of their feeds
+and a feed kept under both is read once. The entries of the folder are merged,
+ordered newest first, and paginated by NAF.
 
 Every entry is projected onto the same shape in the list and in the single
 read: `entry_id`, `guid`, `url`, `title`, `author`, the three dates, `status`,

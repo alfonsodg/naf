@@ -9,6 +9,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- OPML folders as a selectable filter: `GET /api/v1/folders` lists the stored
+  folders with their feed count, `GET /api/v1/entries` accepts a repeated
+  `folder` parameter that resolves the stored feed URLs to reader feed ids and
+  merges their entries with NAF-side pagination, and `POST /api/v1/reports`
+  accepts `folders` when no feed is named and records them in the edition
+  filters. A feed kept under two requested folders is read once, an unknown
+  folder answers an empty page, and `GET /sources` shows each feed's folders.
 - Entry classification and model tracking: `POST /api/v1/entries/{id}/classify`
   stores a topic, tags, publication type, officiality, confidence, and the
   models the entry names with a literal evidence quote; `PATCH` records the

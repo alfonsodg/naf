@@ -1,9 +1,10 @@
 """Turn a report request into the ordered entries the generator receives.
 
-The reader is queried once per requested feed, once per requested category, or
-once for the whole reader. The pages are deduplicated by reader identifier and
-ordered newest first; an entry without a publication date is kept and placed
-last, because an undated entry is never dropped.
+The reader is queried once per requested feed, once per feed of a stored folder,
+once per requested category, or once for the whole reader. The pages are
+deduplicated by reader identifier and ordered newest first; an entry without a
+publication date is kept and placed last, because an undated entry is never
+dropped.
 """
 
 from datetime import UTC, datetime
@@ -12,6 +13,8 @@ from typing import Any
 from app.core.ports.feed_reader import FeedReader
 from app.schemas.reports import ReportCreateRequest
 from app.services.collector import normalize_entry
+from app.services.feed_folders import FeedFolderStore
+from app.services.folder_lookup import feed_ids_for_folders
 
 
 async def select_entries(
@@ -20,10 +23,19 @@ async def select_entries(
     start: datetime,
     end: datetime,
     limit: int,
+    store: FeedFolderStore,
 ) -> list[dict[str, Any]]:
-    """Read the requested selection, deduplicate it, and cap it at ``limit``."""
+    """Read the requested selection, deduplicate it, and cap it at ``limit``.
+
+    A request that names folders resolves them to reader feeds through the NAF
+    record, exactly as the entry list does. An unknown folder selects no feed,
+    so the report is stored as no news instead of reading the whole reader.
+    """
     if request.feed_ids:
         targets: list[tuple[int | None, int | None]] = [(feed_id, None) for feed_id in request.feed_ids]
+    elif request.folders:
+        feed_ids = await feed_ids_for_folders(reader, store, request.folders)
+        targets = [(feed_id, None) for feed_id in feed_ids]
     elif request.category_ids:
         targets = [(None, category_id) for category_id in request.category_ids]
     else:

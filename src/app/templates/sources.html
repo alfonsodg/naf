@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-heading">
   <h1>Fuentes</h1>
-  <p>Las fuentes las administra Miniflux; aquí se consultan con su categoría y su última lectura.</p>
+  <p>Las fuentes las administra Miniflux; aquí se consultan con su categoría, sus carpetas guardadas por la importación y su última lectura. Esas carpetas son las que puedes usar como filtro.</p>
 </div>
 
 {% if error %}<p class="alert alert--error" role="alert">{{ error }} <a href="/sources">Volver a intentarlo</a>.</p>{% endif %}
@@ -16,6 +16,7 @@
       <tr>
         <th scope="col">Fuente</th>
         <th scope="col">Categoría</th>
+        <th scope="col">Carpetas</th>
         <th scope="col">Última consulta</th>
         <th scope="col">Estado</th>
       </tr>
@@ -28,6 +29,7 @@
           {% else %}{{ feed.title or "Sin título" }}{% endif %}
         </td>
         <td>{{ feed.category or "Sin categoría" }}</td>
+        <td>{{ feed.folders|join(", ") if feed.folders else "Sin carpetas" }}</td>
         <td>{{ feed.checked_at or "Sin datos" }}</td>
         <td>
           {{ "En pausa" if feed.disabled else "Activa" }}
