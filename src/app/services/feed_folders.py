@@ -45,8 +45,12 @@ class FeedFolderStore:
         many feeds sit under it. This is what a caller uses to discover the
         available filters; ``feed_urls`` then opens one of them.
         """
-        rows = self.session.execute(select(FeedFolder.folder).distinct().order_by(FeedFolder.folder)).scalars()
-        return list(rows)
+        return [
+            str(value)
+            for value in self.session.execute(
+                select(FeedFolder.folder).distinct().order_by(FeedFolder.folder)
+            ).scalars()
+        ]
 
     def feed_urls(self, folder: str) -> list[str]:
         """Return the feed URLs stored under one folder, sorted.
@@ -55,16 +59,20 @@ class FeedFolderStore:
         subscription by an integer, so a caller maps this list through the
         reader's feed list before selecting entries.
         """
-        rows = self.session.execute(
-            select(FeedFolder.feed_url).where(FeedFolder.folder == folder).order_by(FeedFolder.feed_url)
-        ).scalars()
-        return list(rows)
+        return [
+            str(value)
+            for value in self.session.execute(
+                select(FeedFolder.feed_url).where(FeedFolder.folder == folder).order_by(FeedFolder.feed_url)
+            ).scalars()
+        ]
 
     def folder_counts(self) -> list[dict[str, Any]]:
         """Return each distinct folder with the number of feeds stored under it."""
-        rows = self.session.execute(
-            select(FeedFolder.folder, func.count(FeedFolder.feed_url))
-            .group_by(FeedFolder.folder)
-            .order_by(FeedFolder.folder)
-        )
-        return [{"folder": folder, "feed_count": int(count)} for folder, count in rows]
+        return [
+            {"folder": str(folder), "feed_count": int(count)}
+            for folder, count in self.session.execute(
+                select(FeedFolder.folder, func.count(FeedFolder.feed_url))
+                .group_by(FeedFolder.folder)
+                .order_by(FeedFolder.folder)
+            )
+        ]

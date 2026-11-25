@@ -133,6 +133,11 @@ def test_the_store_lists_distinct_folders_and_their_feed_urls(session: Session) 
     store = FeedFolderStore(session)
 
     assert store.folders() == ["AI", "News", "Tech"]
+    assert store.folder_counts() == [
+        {"folder": "AI", "feed_count": 2},
+        {"folder": "News", "feed_count": 1},
+        {"folder": "Tech", "feed_count": 1},
+    ]
     assert store.feed_urls("AI") == ["https://alpha.test/rss", "https://beta.test/rss"]
     assert store.feed_urls("Tech") == ["https://alpha.test/rss"]
     assert store.feed_urls("Missing") == []
