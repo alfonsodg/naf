@@ -45,13 +45,10 @@ jobs:
         run: uv run bandit -r src/ -q
 
       # Fails on advisories reachable from the deployed dependency set. The
-      # optional "audio" extra is excluded: it is never installed in the
-      # runtime image. The pytest advisory below cannot be fixed while
-      # podcastfy pins pytest<9.0.0; tracked in issue #11.
+      # audio engine is Kokoro (the "tts" extra); Podcastfy was dropped, so
+      # pytest is no longer pinned below 9 and the advisory is gone.
       - name: Dependency audit
-        run: |
-          uv audit --no-extra audio \
-            --ignore GHSA-6w46-j5rx-g56g \
+        run: uv audit
 
       - name: Unit and contract tests
         run: uv run pytest tests/unit --cov=src --cov-report=term-missing --cov-fail-under=80

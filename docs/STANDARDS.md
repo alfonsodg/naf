@@ -5,12 +5,32 @@
 | **Project** | naf — Categorized feed aggregator with audio reports |
 | **Version** | Unreleased |
 | **Created** | 2026-10-18 |
-| **Updated** | 2026-11-24 |
+| **Updated** | 2026-11-25 |
 | **Author** | Alfonso de la Guarda Reyes |
 | **Location** | `docs/STANDARDS.md` |
 
 Development standards applied in this repository. Each rule below is
 enforced by configuration or by a test, not by convention alone.
+
+## Agent rules
+
+This repository has no local `AGENTS.md`. The owner decided on 2026-11-25 that
+the fleet-wide document governs and that this tracked file records the project
+facts a local document would otherwise carry, so an agent does not stop to ask
+for a file that is intentionally absent.
+
+| Fact | Value |
+| --- | --- |
+| Kind | Software, one deployable service, public GitHub repository |
+| Runtime | Python `>=3.12`; the image pins `python:3.13-slim` |
+| Stack | FastAPI 0.144, Pydantic 2.14, SQLAlchemy 2.1, Alembic 1.20, PostgreSQL 17, Miniflux 2.3.3, Kokoro ONNX 0.6.1, pytest 9.2, ruff 0.17, mypy 2.4, bandit |
+| Validation | `uv sync --extra dev`, `ruff check`, `ruff format --check`, `mypy src/`, `bandit -r src/ -q`, `pytest tests/unit --cov=src --cov-fail-under=80` |
+| Tests | Unit and contract suites use doubles; live reader and model runs happen only on the sandbox |
+| Limits | 300-line source files, strict typing, 120-column format, coverage floor 80 |
+| Environments | Development compose and the sandbox; no QA or production deployment yet |
+
+The operational facts (hosts, ports, credentials, backup paths) live in the
+local-only `REMOTE.md`, never here.
 
 ## Language and runtime
 
@@ -22,13 +42,10 @@ enforced by configuration or by a test, not by convention alone.
 ## Package manager and dependencies
 
 - Dependencies are declared in `pyproject.toml`; `uv.lock` is committed.
-- Runtime, development, and optional (`audio`) groups are separated.
+- Runtime, development, and optional (`tts`) groups are separated.
 - `uv sync --extra dev` reproduces the development environment.
-- `uv audit` runs in CI over the default and `dev` groups. Known advisories are
-  triaged in an issue; advisories reachable only through the optional `audio`
-  extra do not block the runtime image, which never installs it.
-- `pytest` is pinned below 9.0 because `podcastfy` (the `audio` extra) requires
-  `pytest>=8.3.3,<9.0.0`. This is a hard upstream constraint, not a choice.
+- `uv audit` runs in CI over the runtime and development groups. A known advisory
+  is triaged in an issue and never ignored silently.
 
 ## Licence policy
 
