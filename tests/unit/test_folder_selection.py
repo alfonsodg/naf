@@ -133,6 +133,7 @@ def test_the_store_lists_distinct_folders_and_their_feed_urls(session: Session) 
     store = FeedFolderStore(session)
 
     assert store.folders() == ["AI", "News", "Tech"]
+    assert store.feed_urls("AI") == sorted(store.feed_urls("AI"))
     assert store.folder_counts() == [
         {"folder": "AI", "feed_count": 2},
         {"folder": "News", "feed_count": 1},

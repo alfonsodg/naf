@@ -4,7 +4,7 @@ The reader holds one category per feed, so the extra folders of an OPML export
 are NAF-owned data: they are the only trace of the tags the user had.
 """
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -45,12 +45,11 @@ class FeedFolderStore:
         many feeds sit under it. This is what a caller uses to discover the
         available filters; ``feed_urls`` then opens one of them.
         """
-        return [
-            str(value)
-            for value in self.session.execute(
-                select(FeedFolder.folder).distinct().order_by(FeedFolder.folder)
-            ).scalars()
-        ]
+        rows = cast(
+            "list[str]",
+            list(self.session.execute(select(FeedFolder.folder).distinct().order_by(FeedFolder.folder)).scalars()),
+        )
+        return rows
 
     def feed_urls(self, folder: str) -> list[str]:
         """Return the feed URLs stored under one folder, sorted.
@@ -59,20 +58,24 @@ class FeedFolderStore:
         subscription by an integer, so a caller maps this list through the
         reader's feed list before selecting entries.
         """
-        return [
-            str(value)
-            for value in self.session.execute(
-                select(FeedFolder.feed_url).where(FeedFolder.folder == folder).order_by(FeedFolder.feed_url)
-            ).scalars()
-        ]
+        rows = cast(
+            "list[str]",
+            list(
+                self.session.execute(
+                    select(FeedFolder.feed_url).where(FeedFolder.folder == folder).order_by(FeedFolder.feed_url)
+                ).scalars()
+            ),
+        )
+        return rows
 
     def folder_counts(self) -> list[dict[str, Any]]:
         """Return each distinct folder with the number of feeds stored under it."""
-        return [
-            {"folder": str(folder), "feed_count": int(count)}
-            for folder, count in self.session.execute(
+        rows = cast(
+            "list[tuple[str, int]]",
+            self.session.execute(
                 select(FeedFolder.folder, func.count(FeedFolder.feed_url))
                 .group_by(FeedFolder.folder)
                 .order_by(FeedFolder.folder)
-            )
-        ]
+            ).all(),
+        )
+        return [{"folder": folder, "feed_count": int(count)} for folder, count in rows]
