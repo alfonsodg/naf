@@ -197,6 +197,29 @@ and keep the value bounded: it is a memory limit, not a preference.
 never forwarded to the `naf` container; `NAF_MINIFLUX_CLEANUP_*` is consumed by
 `miniflux`, not forwarded to `naf` either.
 
+## Edition cleanup
+
+Report editions and their audio stay immutable inside the retention window
+(decision 8, default 90 days). The service does not schedule the cleanup:
+a caller previews it and then runs it explicitly.
+
+```bash
+# Preview: what would be removed, with no deletion
+curl -u naf:<password> "http://127.0.0.1:18082/api/v1/maintenance/editions?days=90"
+
+# Apply: deletes the files and the rows older than the window
+curl -u naf:<password> -X POST \
+  "http://127.0.0.1:18082/api/v1/maintenance/editions?days=90&dry_run=false"
+```
+
+`dry_run` defaults to `true`, so a mistaken call cannot delete. The cleanup
+never touches reader data or ingestion runs, and a file that is already gone is
+counted and skipped. A daily timer on the host is the expected operator:
+
+```cron
+30 4 * * * curl -sf -u naf:<password> -X POST "http://127.0.0.1:18082/api/v1/maintenance/editions?days=90&dry_run=false" >/dev/null
+```
+
 ## Database migrations
 
 The runtime image carries `alembic.ini` and the migration scripts under

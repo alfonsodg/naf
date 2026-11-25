@@ -29,6 +29,8 @@ def test_the_generator_has_a_bounded_default_configuration() -> None:
     assert settings.llm_max_output_tokens == 6000
     assert settings.report_max_entries == 40
     assert settings.report_default_days == 7
+    assert settings.edition_retention_days == 90
+    assert settings.edition_cleanup_enabled is True
 
 
 def test_the_generator_reads_the_provider_settings_from_the_environment(monkeypatch) -> None:

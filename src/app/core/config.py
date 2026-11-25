@@ -137,6 +137,16 @@ class Settings(BaseSettings):
         le=90,
         description="Window used when a request names neither a period nor since_last",
     )
+    edition_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        description="Days an edition and its audio stay before a cleanup may remove them",
+    )
+    edition_cleanup_enabled: bool = Field(
+        default=True,
+        description="Report whether the manual cleanup route is allowed to delete",
+    )
 
     # TTS adapter
     tts_provider: str = "podcastfy"
