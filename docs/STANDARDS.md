@@ -41,8 +41,8 @@ review date:
 
 | Component | Choice | Why | Review |
 | --- | --- | --- | --- |
-| Python | 3.14 (image and CI) | 3.15 is stable, but `onnxruntime` 1.32 ships no `cp315` wheel, and the audio path needs it | When `onnxruntime` publishes 3.15 wheels |
-| PostgreSQL | 18 | 19.0 shipped on 2026-11-19; give Miniflux and the dump/restore path time on the previous stable | 2026-12-19 |
+| Python | 3.14 (image and CI) | 3.15 is stable, but `onnxruntime` 1.32 ships no `cp315` wheel, and the audio path needs it | Backlog #57, when the wheel exists |
+| PostgreSQL | 18 | 19.0 shipped on 2026-11-19; Miniflux support and the dump/restore path must be validated first | Backlog #58, after Miniflux validates 19 |
 | nginx | 1.30 (stable branch) | The odd-numbered branch (1.31) is mainline, not the stable line | On each stable release |
 
 ## Language and runtime
