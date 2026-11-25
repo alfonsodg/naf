@@ -29,9 +29,26 @@ class FeedFolderStore:
     def record(self, feed_url: str, folders: list[str]) -> None:
         """Store the folders found for a feed, replacing the previous ones."""
         self.session.execute(delete(FeedFolder).where(FeedFolder.feed_url == feed_url))
+        seen: set[str] = set()
         for folder in folders:
-            self.session.add(FeedFolder(feed_url=feed_url, folder=folder))
+            name = folder.strip()
+            if not name or name.casefold() in seen:
+                continue
+            seen.add(name.casefold())
+            self.session.add(FeedFolder(feed_url=feed_url, folder=name))
         self.session.commit()
+
+    def folders_of(self, feed_url: str) -> list[str]:
+        """Return the folders stored for one feed, sorted."""
+        rows = cast(
+            "list[str]",
+            list(
+                self.session.execute(
+                    select(FeedFolder.folder).where(FeedFolder.feed_url == feed_url).order_by(FeedFolder.folder)
+                ).scalars()
+            ),
+        )
+        return rows
 
     def list_folders(self) -> list[dict[str, Any]]:
         """Return every stored folder with the feed it belongs to."""

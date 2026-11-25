@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Clasificación · naf{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <h1>Clasificación</h1>
+  <p>Sugerencias guardadas. Corrige el tema, las etiquetas o el tipo: la corrección queda como tuya y una pasada automática posterior no la sobrescribe.</p>
+</div>
+
+{% if notice %}<p class="alert alert--ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="alert alert--error" role="alert">{{ error }}</p>{% endif %}
+
+{% if rows %}
+<div class="table-wrap">
+  <table>
+    <caption class="visually-hidden">Clasificaciones guardadas</caption>
+    <thead>
+      <tr>
+        <th scope="col">Entrada</th>
+        <th scope="col">Tema y etiquetas</th>
+        <th scope="col">Origen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.entry_id }}</td>
+        <td>
+          <form method="post" action="/ui/classifications/{{ row.entry_id }}" class="form form--inline">
+            <div class="field">
+              <label for="category-{{ row.entry_id }}">Tema</label>
+              <input id="category-{{ row.entry_id }}" name="category" value="{{ row.category or '' }}" maxlength="100">
+            </div>
+            <div class="field">
+              <label for="tags-{{ row.entry_id }}">Etiquetas</label>
+              <input id="tags-{{ row.entry_id }}" name="tags" value="{{ row.tags|join(', ') if row.tags else '' }}" maxlength="300">
+            </div>
+            <div class="field">
+              <label for="pub-{{ row.entry_id }}">Tipo</label>
+              <input id="pub-{{ row.entry_id }}" name="pub_type" value="{{ row.pub_type or '' }}" maxlength="100">
+            </div>
+            <button type="submit" class="button">Guardar</button>
+          </form>
+        </td>
+        <td>{{ "Tu corrección" if row.source == "user" else "Automática" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty">Todavía no hay clasificaciones guardadas. Usa «Clasificar novedades» en Fuentes.</p>
+{% endif %}
+{% endblock %}

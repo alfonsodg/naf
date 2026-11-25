@@ -43,7 +43,10 @@
           {% else %}{{ feed.title or "Sin título" }}{% endif %}
         </td>
         <td>{{ feed.category or "Sin categoría" }}</td>
-        <td>{{ feed.folders|join(", ") if feed.folders else "Sin carpetas" }}</td>
+        <td>
+          {{ feed.folders|join(", ") if feed.folders else "Sin carpetas" }}
+          {% if feed.feed_id %}<a href="/sources/{{ feed.feed_id }}/folders">Editar</a>{% endif %}
+        </td>
         <td>{{ feed.checked_at or "Sin datos" }}</td>
         <td>
           {{ "En pausa" if feed.disabled else "Activa" }}

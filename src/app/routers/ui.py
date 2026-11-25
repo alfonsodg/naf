@@ -38,6 +38,7 @@ from app.routers.ui_support import (
     segments,
     stored_segments,
 )
+from app.schemas.classification import ClassificationCorrection
 from app.schemas.reports import ReportDetail
 from app.services.audio import AudioService
 from app.services.classification import ClassificationService
@@ -181,6 +182,65 @@ async def generate_audio(report_id: int, request: Request, session: SessionDep) 
     return _redirect(report_id, "notice=audio")
 
 
+@router.get("/sources/{feed_id}/folders", response_model=None)
+async def edit_folders(feed_id: int, request: Request, session: SessionDep) -> Response:
+    """Show the stored folders of one feed and a form to replace them."""
+    try:
+        feeds = await _reader().list_feeds()
+    except MinifluxAPIError:
+        return render(request, "folders.html", {"feed": None, "folders": [], "error": READER_ERROR}, status_code=502)
+    feed = next((row for row in feeds if int(row.get("id", 0)) == feed_id), None)
+    if feed is None:
+        return not_found(request, "No existe ninguna fuente con ese identificador.")
+    current = FeedFolderStore(session).folders_of(str(feed.get("feed_url") or ""))
+    return render(
+        request,
+        "folders.html",
+        {"feed": normalize_feed(feed), "folders": current, "notice": None, "error": None},
+    )
+
+
+@router.post("/ui/feeds/{feed_id}/folders", response_model=None)
+async def save_folders(feed_id: int, request: Request, session: SessionDep) -> Response:
+    """Replace the folders of one feed and return to the sources page."""
+    form = await request.form()
+    raw = field(form, "folders")
+    folders = [name.strip() for name in raw.split(",") if name.strip()][:10]
+    try:
+        feeds = await _reader().list_feeds()
+    except MinifluxAPIError:
+        return _sources_redirect("error=folders-reader")
+    feed = next((row for row in feeds if int(row.get("id", 0)) == feed_id), None)
+    if feed is None or not feed.get("feed_url"):
+        return not_found(request, "No existe ninguna fuente con ese identificador.")
+    FeedFolderStore(session).record(str(feed["feed_url"]), folders)
+    return _sources_redirect("notice=folders")
+
+
+@router.get("/classifications", response_model=None)
+async def classifications(request: Request, session: SessionDep) -> Response:
+    """List the stored suggestions with a form to correct each one."""
+    rows = ClassificationService.recent(session)
+    notice = "Corrección guardada." if request.query_params.get("notice") == "saved" else None
+    return render(request, "classifications.html", {"rows": rows, "notice": notice, "error": None})
+
+
+@router.post("/ui/classifications/{entry_id}", response_model=None)
+async def save_classification(entry_id: int, request: Request, session: SessionDep) -> Response:
+    """Store the user's correction of one suggestion."""
+    form = await request.form()
+    tags = [tag.strip() for tag in field(form, "tags").split(",") if tag.strip()]
+    payload = ClassificationCorrection(
+        category=field(form, "category") or None,
+        tags=tags,
+        pub_type=field(form, "pub_type") or None,
+    )
+    outcome = ClassificationService(session, _reader(), _classifier()).correct(entry_id, payload)
+    if outcome is None:
+        return not_found(request, "No hay ninguna clasificación guardada para esa entrada.")
+    return RedirectResponse("/classifications?notice=saved", status_code=303)
+
+
 @router.get("/sources", response_model=None)
 async def sources(request: Request, session: SessionDep) -> Response:
     """List the configured feeds with their category, stored folders, and last check.
@@ -225,6 +285,8 @@ async def classify_backlog(request: Request, session: SessionDep) -> Response:
 def _source_message(request: Request) -> tuple[str | None, str | None]:
     """Translate the fixed notice and error codes the sources page may carry."""
     notice: str | None = None
+    if request.query_params.get("notice") == "folders":
+        notice = "Carpetas guardadas."
     if request.query_params.get("notice") == "classified":
         count = _classified_count(request.query_params.get("classified"))
         notice = f"Se clasificaron {count} novedades." if count > 0 else "No había novedades pendientes de clasificar."
