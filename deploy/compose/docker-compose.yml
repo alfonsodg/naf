@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: ${NAF_DB_PASSWORD:?NAF_DB_PASSWORD is required}
       POSTGRES_DB: ${NAF_DB_NAME:?NAF_DB_NAME is required}
     volumes:
-      - naf-db:/var/lib/postgresql/data
+      # PostgreSQL 18 keeps its data in a versioned subdirectory of
+      # /var/lib/postgresql, which is why the mount covers the parent.
+      - naf-db:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${NAF_DB_USER} -d ${NAF_DB_NAME}"]
       interval: 10s
@@ -23,7 +25,7 @@ services:
       POSTGRES_PASSWORD: ${NAF_MINIFLUX_DB_PASSWORD:?NAF_MINIFLUX_DB_PASSWORD is required}
       POSTGRES_DB: ${NAF_MINIFLUX_DB_NAME:?NAF_MINIFLUX_DB_NAME is required}
     volumes:
-      - miniflux-db:/var/lib/postgresql/data
+      - miniflux-db:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${NAF_MINIFLUX_DB_USER} -d ${NAF_MINIFLUX_DB_NAME}"]
       interval: 10s
