@@ -40,3 +40,9 @@ class FeedUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     category_id: int | None = Field(default=None, ge=1)
     disabled: bool | None = Field(default=None, description="True pauses the feed")
+
+
+class FeedFolderAssignment(BaseModel):
+    """Manual folder assignment for one feed, replacing the stored set."""
+
+    folders: list[str] = Field(default_factory=list, max_length=10, description="Folder names to keep")

@@ -121,6 +121,16 @@ class ClassificationService:
             return None
         return ClassificationOutcome(row, self._mentions(entry_id))
 
+    @classmethod
+    def recent(cls, session: Session, limit: int = 50) -> list[EntryClassification]:
+        """Return the most recently updated classifications, newest first."""
+        statement = (
+            select(EntryClassification)
+            .order_by(EntryClassification.updated_at.desc(), EntryClassification.id.desc())
+            .limit(limit)
+        )
+        return list(session.execute(statement).scalars().all())
+
     async def pending(self, limit: int) -> PendingOutcome:
         """Count the newest reader entries that have no stored classification.
 

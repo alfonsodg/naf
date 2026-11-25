@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
 from app.db.session import get_session
 from app.schemas.errors import error_body
-from app.schemas.feeds import FeedCreateRequest, FeedUpdateRequest
+from app.schemas.feeds import FeedCreateRequest, FeedFolderAssignment, FeedUpdateRequest
 from app.services.collector import Collector, normalize_feed
 from app.services.feed_documents import CandidateFeed, parse_opml, parse_url_list
 from app.services.feed_folders import FeedFolderStore
@@ -206,6 +206,31 @@ async def intake_feeds(request: Request, session: SessionDep) -> dict[str, Any]:
 async def list_feed_folders(session: SessionDep) -> dict[str, Any]:
     """List the folders found for the feeds, besides the applied category."""
     return {"data": FeedFolderStore(session).list_folders()}
+
+
+@router.put("/feeds/{feed_id}/folders")
+async def set_feed_folders(
+    feed_id: Annotated[int, Path(ge=1)], payload: FeedFolderAssignment, session: SessionDep
+) -> dict[str, Any]:
+    """Replace the NAF folders stored for one feed.
+
+    The reader holds a single category per feed, so the extra folders are NAF
+    data the user owns; assigning them here never touches the reader.
+    """
+    try:
+        feeds = await _client().list_feeds()
+    except MinifluxAPIError as exc:
+        raise _unavailable(exc) from exc
+    feed = next((row for row in feeds if int(row.get("id", 0)) == feed_id), None)
+    if feed is None or not feed.get("feed_url"):
+        raise HTTPException(
+            status_code=404,
+            detail=error_body("FEED_NOT_FOUND", "the reader does not have that subscription"),
+        )
+    folders = [folder.strip() for folder in payload.folders if folder.strip()]
+    store = FeedFolderStore(session)
+    store.record(str(feed["feed_url"]), folders)
+    return {"data": {"feed_id": feed_id, "feed_url": feed["feed_url"], "folders": folders}}
 
 
 @router.get("/folders")

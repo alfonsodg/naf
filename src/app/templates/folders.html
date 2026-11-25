@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Carpetas · naf{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <h1>Carpetas de {{ feed.title or "la fuente" }}</h1>
+  <p>Las carpetas son datos de NAF: el lector solo guarda una categoría por fuente. Sepáralas con comas; se reemplazan todas las de esta fuente.</p>
+</div>
+
+{% if error %}<p class="alert alert--error" role="alert">{{ error }}</p>{% endif %}
+
+{% if feed %}
+<form method="post" action="/ui/feeds/{{ feed.feed_id }}/folders" class="form card">
+  <div class="field">
+    <label for="folders">Carpetas</label>
+    <input type="text" id="folders" name="folders" value="{{ folders|join(', ') }}" maxlength="600">
+    <p class="hint">Ejemplo: Inteligencia artificial, Hardware. Vacío para quitarlas todas.</p>
+  </div>
+  <button type="submit" class="button">Guardar carpetas</button>
+  <a class="link-button" href="/sources">Volver a fuentes</a>
+</form>
+{% endif %}
+{% endblock %}
