@@ -20,10 +20,13 @@ from app.core.ports.feed_reader import FeedReader
 from app.db.session import get_session
 from app.routers.feeds import LimitQuery, PageQuery
 from app.schemas.classification import (
+    ClassificationBatchRequest,
+    ClassificationBatchResponse,
     ClassificationCorrection,
     ClassificationDetailResponse,
     ClassificationListResponse,
     ClassificationPagination,
+    ClassificationPendingResponse,
     ClassificationResponse,
     ClassificationView,
     ModelMentionView,
@@ -35,6 +38,9 @@ router = APIRouter()
 
 SessionDep = Annotated[Session, Depends(get_session)]
 ReviewQuery = Annotated[bool | None, Query(description="Filter by the review flag; omit to list every row")]
+PendingLimitQuery = Annotated[
+    int, Query(ge=1, le=50, description="Newest entries inspected while counting the backlog")
+]
 
 
 def _reader() -> FeedReader:
@@ -154,3 +160,54 @@ async def list_classifications(
             total_pages=(total + per_page - 1) // per_page if total else 0,
         ),
     )
+
+
+@router.post("/classifications/run")
+async def run_classification_batch(
+    payload: ClassificationBatchRequest, session: SessionDep
+) -> ClassificationBatchResponse:
+    """Classify a bounded batch of the newest entries that have no classification.
+
+    Entries the user corrected already carry a classification and are never
+    revisited. The pass stops on the first provider failure and answers what it
+    committed, with a Spanish reason, instead of discarding it.
+    """
+    if not app_settings.llm_model:
+        raise HTTPException(
+            status_code=503,
+            detail=error_body("CLASSIFIER_NOT_CONFIGURED", "no LLM model is configured for classification"),
+        )
+    try:
+        outcome = await _service(session).run_batch(payload.limit)
+    except MinifluxAPIError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=error_body("MINIFLUX_UNAVAILABLE", str(exc)),
+        ) from exc
+    return ClassificationBatchResponse(
+        classified=len(outcome.outcomes),
+        entry_ids=outcome.entry_ids,
+        scanned=outcome.scanned,
+        data=[ClassificationView.model_validate(completed.classification) for completed in outcome.outcomes],
+        stopped_reason=outcome.stopped_reason,
+    )
+
+
+@router.get("/classifications/pending")
+async def pending_classifications(
+    session: SessionDep,
+    limit: PendingLimitQuery = 20,
+) -> ClassificationPendingResponse:
+    """Count how many of the newest reader entries still lack a classification.
+
+    The scan is bounded by ``limit`` so the endpoint never walks the whole
+    reader history just to size the backlog a client is about to classify.
+    """
+    try:
+        outcome = await _service(session).pending(limit)
+    except MinifluxAPIError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=error_body("MINIFLUX_UNAVAILABLE", str(exc)),
+        ) from exc
+    return ClassificationPendingResponse(scanned=outcome.scanned, pending=outcome.pending)

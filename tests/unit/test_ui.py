@@ -29,7 +29,7 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import app
 from app.models import AudioAsset, Digest
-from app.routers import ui
+from app.routers import ui, ui_support
 
 client = TestClient(app)
 
@@ -163,6 +163,21 @@ def test_the_report_renders_stories_citations_and_the_synced_player(
     assert 'data-story-index="0"' in response.text
     assert 'data-story-seek="0"' in response.text
     assert "Generar audio" not in response.text
+
+
+def test_the_report_period_is_rendered_in_the_configured_zone(
+    session: Session, wire: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stored UTC instants reach the page in the display zone with its abbreviation."""
+    wire(FakeReader(), FakeGenerator())
+    monkeypatch.setattr(ui_support, "app_settings", settings(display_timezone="Europe/Madrid"))
+    digest = make_report(session)
+
+    response = client.get(f"/reports/{digest.id}")
+
+    assert response.status_code == 200
+    assert "18/11/2026 01:00 CET" in response.text
+    assert "24/11/2026 01:00 CET" in response.text
 
 
 def test_a_report_without_audio_offers_generation(session: Session, wire: Callable[..., None]) -> None:

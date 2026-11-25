@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
 
+    # Display
+    display_timezone: str = Field(
+        default="UTC",
+        description="IANA timezone used to render instants on the web pages; the API always serves UTC",
+    )
+
     # Complement database
     database_url: str = Field(description="PostgreSQL DSN for the NAF database")
 

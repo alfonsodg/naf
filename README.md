@@ -304,6 +304,13 @@ marks the row as `source=user`; a later automatic pass returns it unchanged.
 `GET /classifications?review_needed=true` lists what the model could not place,
 so nothing is force-fitted into a category.
 
+`POST /api/v1/classifications/run` classifies a bounded batch (`limit` 1–20) of
+the newest entries that have no stored classification. Corrected rows are never
+revisited, and the first provider failure stops the pass while keeping what was
+already stored, with a Spanish `stopped_reason`. The pending endpoint
+(`GET /api/v1/classifications/pending?limit=20`) sizes the recent backlog
+without walking the full reader history.
+
 ## Web interface
 
 The same process renders the complementary screens the product plan requires
@@ -318,13 +325,17 @@ talks to Miniflux directly. The pages call the same `ReportService`,
 | `GET` | `/reports/{report_id}` | Report, citations, audio player, and synced transcript |
 | `POST` | `/ui/reports/{report_id}/audio` | Synthesize the spoken edition and redirect back |
 | `GET` | `/sources` | Feeds with their category and last check |
+| `POST` | `/ui/classify` | Classify the newest pending entries and redirect to the sources page |
 | `GET` | `/static/*` | Stylesheet and the vanilla-JS player |
 
 The report page links every claim to its source, inlines the segments stored
 with the audio asset, highlights the segment being spoken, and seeks when a
 segment is selected. Spanish labels and messages are the only user-facing
 text; a generation or speech failure re-renders the text edition without
-leaking the provider detail. There is no framework and no build step.
+leaking the provider detail. The API stores and serves every instant in UTC;
+the pages render them in `NAF_DISPLAY_TIMEZONE` (default `UTC`) and append the
+zone abbreviation, so a period reads in the deployment's local time without
+changing the API contract. There is no framework and no build step.
 
 ## Documentation
 
