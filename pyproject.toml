@@ -112,9 +112,3 @@ dev = [
     "types-defusedxml>=0.7.0.20240218",
 ]
 
-[tool.uv]
-# The two speech engines are alternatives, not companions: Podcastfy pins
-# numpy<2 while Kokoro needs numpy>=2, so a deployment installs one or the other.
-conflicts = [
-    [{ extra = "audio" }, { extra = "tts" }],
-]

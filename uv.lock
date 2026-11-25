@@ -2,20 +2,9 @@ version = 1
 revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
-    "python_full_version >= '3.15' and extra != 'extra-3-naf-audio' and extra == 'extra-3-naf-tts'",
-    "python_full_version >= '3.15' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version >= '3.15' and extra != 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version == '3.14.*' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version == '3.13.*' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version >= '3.12.4' and python_full_version < '3.13' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version < '3.15' and extra != 'extra-3-naf-audio' and extra == 'extra-3-naf-tts'",
-    "python_full_version < '3.12.4' and extra == 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
-    "python_full_version < '3.15' and extra != 'extra-3-naf-audio' and extra != 'extra-3-naf-tts'",
+    "python_full_version >= '3.15'",
+    "python_full_version < '3.15'",
 ]
-conflicts = [[
-    { package = "naf", extra = "audio" },
-    { package = "naf", extra = "tts" },
-]]
 
 [[package]]
 name = "aiofiles"
