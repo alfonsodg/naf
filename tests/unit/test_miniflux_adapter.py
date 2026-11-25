@@ -214,3 +214,81 @@ async def test_refresh_feed_reports_the_no_content_answer(
     monkeypatch.setattr(client, "_request", fake_request)
 
     assert await client.refresh_feed(9) is True
+
+
+@pytest.fixture
+def no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip the backoff so the retry tests stay fast."""
+
+    async def immediate(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.adapters.miniflux.client.asyncio.sleep", immediate)
+
+
+async def test_a_retryable_status_is_retried(
+    client: MinifluxClient, monkeypatch: pytest.MonkeyPatch, no_sleep: None
+) -> None:
+    """A 503 is tried again and the successful answer wins."""
+    calls = {"count": 0}
+
+    async def flaky(*args: object, **kwargs: object) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] < 3:
+            return _response(503, text="busy")
+        return _response(200, json_body=[])
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", flaky)
+
+    assert await client.list_feeds() == []
+    assert calls["count"] == 3
+
+
+async def test_a_client_error_is_not_retried(
+    client: MinifluxClient, monkeypatch: pytest.MonkeyPatch, no_sleep: None
+) -> None:
+    """A 401 is final: retrying a refusal only repeats it."""
+    calls = {"count": 0}
+
+    async def unauthorized(*args: object, **kwargs: object) -> httpx.Response:
+        calls["count"] += 1
+        return _response(401, json_body={"error_message": "unauthorized"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", unauthorized)
+
+    with pytest.raises(MinifluxAPIError):
+        await client.list_feeds()
+    assert calls["count"] == 1
+
+
+async def test_the_retries_are_bounded(client: MinifluxClient, monkeypatch: pytest.MonkeyPatch, no_sleep: None) -> None:
+    """A host that never recovers is tried the configured number of times."""
+    calls = {"count": 0}
+
+    async def busy(*args: object, **kwargs: object) -> httpx.Response:
+        calls["count"] += 1
+        return _response(503, text="busy")
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", busy)
+
+    with pytest.raises(MinifluxAPIError):
+        await client.list_feeds()
+    assert calls["count"] == 4
+
+
+async def test_a_transport_error_is_retried(
+    client: MinifluxClient, monkeypatch: pytest.MonkeyPatch, no_sleep: None
+) -> None:
+    """A transient connection failure is tried again."""
+    calls = {"count": 0}
+
+    async def flaky(*args: object, **kwargs: object) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ConnectError("connection refused")
+        return _response(200, json_body=[])
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", flaky)
+
+    assert await client.list_feeds() == []
+    assert calls["count"] == 2

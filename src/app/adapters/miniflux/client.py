@@ -1,5 +1,6 @@
 """Miniflux reader adapter. Access is strictly through the REST API."""
 
+import asyncio
 from datetime import datetime
 from typing import Any, cast
 
@@ -8,6 +9,9 @@ import httpx
 from app.core.config import settings
 from app.core.exceptions import MinifluxAPIError
 from app.core.ports.feed_reader import FeedReader
+
+_RETRYABLE_STATUS = {502, 503, 504}
+_RETRY_DELAY_SECONDS = 0.25
 
 
 class MinifluxClient(FeedReader):
@@ -36,29 +40,40 @@ class MinifluxClient(FeedReader):
         request_headers = self._headers()
         if headers:
             request_headers.update(headers)
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.request(
-                    method,
-                    f"{self.base_url}{path}",
-                    params=params,
-                    json=json_body,
-                    content=content,
-                    headers=request_headers,
-                )
-                response.raise_for_status()
-                return response
-        except httpx.HTTPStatusError as exc:
-            # Miniflux explains refusals in the body ("fetcher: access forbidden"),
-            # and that message is the only diagnostic the caller gets. Dropping it
-            # would reduce every failure to a bare status code.
-            detail = _error_message(exc.response)
-            raise MinifluxAPIError(
-                f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else ""),
-                status_code=exc.response.status_code,
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise MinifluxAPIError(f"Miniflux {path} request failed: {exc}") from exc
+        retries = max(0, settings.miniflux_max_retries)
+        for attempt in range(retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.request(
+                        method,
+                        f"{self.base_url}{path}",
+                        params=params,
+                        json=json_body,
+                        content=content,
+                        headers=request_headers,
+                    )
+                    response.raise_for_status()
+                    return response
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in _RETRYABLE_STATUS and attempt < retries:
+                    await asyncio.sleep(_RETRY_DELAY_SECONDS * (attempt + 1))
+                    continue
+                # Miniflux explains refusals in the body ("fetcher: access forbidden"),
+                # and that message is the only diagnostic the caller gets. Dropping it
+                # would reduce every failure to a bare status code.
+                detail = _error_message(exc.response)
+                raise MinifluxAPIError(
+                    f"Miniflux {path} returned {exc.response.status_code}" + (f": {detail}" if detail else ""),
+                    status_code=exc.response.status_code,
+                ) from exc
+            except httpx.TransportError as exc:
+                if attempt < retries:
+                    await asyncio.sleep(_RETRY_DELAY_SECONDS * (attempt + 1))
+                    continue
+                raise MinifluxAPIError(f"Miniflux {path} request failed: {exc}") from exc
+            except httpx.HTTPError as exc:
+                raise MinifluxAPIError(f"Miniflux {path} request failed: {exc}") from exc
+        raise MinifluxAPIError(f"Miniflux {path} request failed after {retries + 1} attempts")
 
     async def health(self) -> dict[str, Any]:
         """Return the Miniflux health status."""
