@@ -1,0 +1,309 @@
+# Standards
+
+| | |
+|---|---|
+| **Project** | naf — Categorized feed aggregator with audio reports |
+| **Version** | Unreleased |
+| **Created** | 2026-10-18 |
+| **Updated** | 2026-11-24 |
+| **Author** | Alfonso de la Guarda Reyes |
+| **Location** | `docs/STANDARDS.md` |
+
+Development standards applied in this repository. Each rule below is
+enforced by configuration or by a test, not by convention alone.
+
+## Language and runtime
+
+- Python `>=3.12`, run with the version pinned in the image (`python:3.13-slim`).
+- `uv` is the only package manager. Never `pip install` into the environment.
+- Code, comments, docstrings, commit messages, branches, and issue text are
+  English. Product output (reports and audio) is Spanish.
+
+## Package manager and dependencies
+
+- Dependencies are declared in `pyproject.toml`; `uv.lock` is committed.
+- Runtime, development, and optional (`audio`) groups are separated.
+- `uv sync --extra dev` reproduces the development environment.
+- `uv audit` runs in CI over the default and `dev` groups. Known advisories are
+  triaged in an issue; advisories reachable only through the optional `audio`
+  extra do not block the runtime image, which never installs it.
+- `pytest` is pinned below 9.0 because `podcastfy` (the `audio` extra) requires
+  `pytest>=8.3.3,<9.0.0`. This is a hard upstream constraint, not a choice.
+
+## Licence policy
+
+The project is Apache-2.0. That licence covers this repository, not its
+dependencies, model weights, voices, or prompt templates.
+
+- **Licence inventory.** Every dependency is inventoried with its declared
+  licence before a distribution artefact is built. The current inventory is
+  recorded in issue #2; it is generated from installed package metadata, not from
+  documentation.
+- **`psycopg` is LGPL-3.0-only** and is the only copyleft package in the runtime
+  set. LGPL permits use from Apache-2.0 code while the library stays unmodified
+  and replaceable. Two consequences are binding:
+  - never vendor, patch, or fork `psycopg` inside this repository;
+  - never build a single-file artefact that statically bundles it without
+    revisiting this policy.
+- **MPL-2.0** (`certifi`, `pathspec`) is file-level copyleft. Unmodified use
+  carries no obligation beyond keeping notices. `pathspec` is development-only.
+- **Dev-only licences do not gate distribution.** `pytest`, `ruff`, `mypy`,
+  `bandit`, and `coverage` never enter the runtime image.
+- **Never invent a licence.** Where package metadata declares none (`bandit`,
+  `coverage`, `python-dotenv`), record it as undeclared rather than assuming the
+  project's usual licence.
+- **No scanning tool decides this.** Model weights, TTS voices, and feed content
+  are out of scope for any dependency scanner and are reviewed when Phase 5
+  selects an audio engine.
+
+## File structure
+
+```text
+src/app/
+  adapters/        Infrastructure implementations of the ports
+    http/          Outbound HTTP probes (feed validation)
+    miniflux/      Reader REST API client
+    storage/       Audio persistence
+  core/            Settings, exceptions, and ports
+    ports/         Interfaces used for dependency inversion
+  db/              SQLAlchemy base, session, migrations
+  models/          ORM entities owned by NAF
+  routers/         Thin HTTP handlers
+  schemas/         Pydantic request/response and domain schemas
+  services/        Business logic
+tests/
+  unit/            Isolated logic and contract tests (run locally)
+  integration/     Persistent-service tests (remote test server only)
+deploy/
+  compose/         Development orchestration
+  dev|qa|rev|prod/ Environment manifests
+samples/           Safe configuration templates
+```
+
+Layering is one-directional: `routers → services → core.ports`, with adapters
+implementing `core.ports`. Ports and schemas never import adapters, routers,
+services, or `db`; `tests/unit/test_app_structure.py` enforces this.
+
+## Code patterns
+
+- Dependency inversion: services receive a port, never a concrete adapter.
+- Fail-fast configuration: required values (database DSN, Miniflux URL and
+  token) have no defaults; startup fails instead of falling back silently.
+- Errors are domain exceptions from `src/app/core/exceptions.py`; routers
+  translate them into the documented error envelope.
+- No silent data loss: entries without a publication date are kept, and
+  per-feed failures never abort an ingestion pass. The normalized entry keeps
+  the attachments and the tags the feed provided, because an audio enclosure
+  is part of the provenance of a podcast entry.
+- Public functions and classes carry docstrings stating responsibility and
+  inputs/outputs. Commented-out code is not committed.
+- Timestamps cross the API as ISO-8601 and are normalised to UTC at the
+  boundary; a value without a zone is read as UTC. The reader receives unix
+  timestamps, which is the format its API expects.
+- An entry carries three distinct dates and they are never interchangeable:
+  `published_at` is what the publisher declares, `created_at` is when the
+  reader captured the entry, and `changed_at` is its last known modification
+  in the reader. A date the reader does not report is `null` with the key
+  still present, so a caller never has to tell a missing key from a missing
+  value.
+
+## Linting and formatting
+
+```bash
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
+uv run mypy src/
+uv run bandit -r src/ -q
+```
+
+- ruff: line length 120, rule set `E, W, F, I, N, UP, B, S, C4, SIM, RUF`,
+  `E501` ignored because the formatter owns width.
+- mypy: `strict = true` over `src/`; Alembic imports are the only override.
+- bandit: no findings permitted under `src/`.
+
+## Testing
+
+```bash
+uv run pytest tests/unit -q                 # local, no external services
+uv run pytest tests/ --cov=src --cov-report=term-missing
+```
+
+- Unit and contract tests run locally on every change.
+- Integration tests require a persistent database or a live Miniflux instance
+  and therefore run only on the designated remote test server recorded in
+  `REMOTE.md`. No database, cache, or container runtime is installed locally.
+- New code targets 80% line coverage; changed lines target 95%.
+- Significant changes follow TDD: the failing test exists before the
+  implementation. Trivial fixes use basic validation instead.
+- Deterministic literals are allowed in test fixtures only, and never contain
+  real credentials.
+
+## Naming conventions
+
+- Modules and functions: `snake_case`. Classes: `PascalCase`.
+- Constants: `UPPER_SNAKE_CASE`.
+- Ports describe capability (`FeedReader`), adapters name the technology
+  (`MinifluxClient`).
+- JSON fields are `snake_case`; routes are plural nouns in kebab-case when
+  multi-word.
+
+## Configuration
+
+- Typed settings in `src/app/core/config.py`, prefix `NAF_`.
+- Every variable is documented in `env.dev`, `env.qa`, `env.rev`, and
+  `env.prod`; `samples/.env.example` is the copyable template.
+- Adding, renaming, or removing a variable updates the matching `env.*` files
+  in the same change.
+
+## Data ownership
+
+Reader state (feeds, entries, read flags, categories) belongs to Miniflux and
+is accessed only through its REST API. Accessing Miniflux tables directly is
+prohibited. NAF owns digests, citations, audio assets, classification, and
+ingestion runs in its own PostgreSQL database.
+
+The NAF API owns the feed write surface: adding, renaming, moving, pausing,
+refreshing, and removing a subscription. Removing one deletes the subscription
+from the reader, and the reader cascades that deletion to every entry the feed
+carried, so the feed's entries are deleted with it. NAF-owned records live
+outside the reader and stay untouched, and no volume is ever removed. Pausing
+is the non-destructive alternative: `PATCH /feeds/{id}` with `disabled: true`
+stops the polling and keeps the entries and their read state.
+
+Every reader object is projected onto a shape this project defines before it
+leaves the API. The feed list, the feed health report, the single-feed write,
+and the entry list each expose the fields documented in `README.md`, never the
+reader's own internals such as its scraping rules, the credentials of an
+authenticated feed, or its icon. The entry list accepts a repeated `tags`
+parameter, forwarded to the reader in that form and combined with AND, so an
+entry must carry every requested tag and each added tag narrows the result.
+
+The OPML export is the exception, and it is deliberate: it is the reader's own
+document, built to be re-imported, and it carries the subscription settings the
+reader stores. It does not carry feed credentials, which the reader keeps
+outside the document and in separate fields.
+
+Every ingestion pass is recorded in `ingestion_runs`: when it started, when it
+finished, whether it succeeded or a feed failed, how many entries it saw, and
+which feeds failed with which error. The run identifier is returned by
+`POST /collect` and carried in the structured logs, and the recorded history is
+read back through `GET /api/v1/ingestion-runs` (paginated, with an optional
+`status` filter) and `GET /api/v1/ingestion-runs/{run_id}`. A run is a record
+of the pass, never a precondition for it: a storage problem is logged and the
+pass continues. The run is closed on every exit, including the paths that
+raise, so no row is ever left running by a pass that never finished.
+
+Retention is an explicit decision, not a provider default. The stack declares
+the reader's cleanup (decision 8): 90 days after an entry is read, 180 days for
+an unread one, run once a day. NAF keeps, with every citation, the entry id,
+URL, title, and author captured when the report was written, and never a copy of
+the body. A citation therefore outlives the reader's copy: its identifying
+fields and its link remain, while the body and any regeneration from the reader
+do not. No retention action deletes, truncates, or recreates a volume.
+
+## Feed intake and validation
+
+A feed URL arriving from a pasted list, an OPML export, or a form field is
+untrusted input. Two rules follow, and both are binding.
+
+**Validation precedes insertion.** Every candidate is probed over HTTP before
+the reader is asked to store it. A catalogue's own "active" flag is not
+evidence: measured catalogues carry 4–25 % dead feeds. The probe produces
+exactly one verdict:
+
+| Verdict | Meaning | Action |
+| --- | --- | --- |
+| `alive` | HTTP 2xx and at least one `<item>` or `<entry>` | added enabled |
+| `empty` | HTTP 2xx but no entries | reported, not added |
+| `http_error` | 404, 410, dead domain, or a non-feed document | reported, not added |
+| `throttled` | 401, 403, 405, 406, 409, 418, 429 | added **disabled**, reported unverified |
+| `timeout` | no response within the configured limit | reported, not added |
+| `blocked` | forbidden scheme, host, or redirect target | reported, not added |
+
+`not_processed` is not a probe verdict but a report outcome: the batch limit
+or the time budget left that candidate out. It is reported so the caller knows
+the payload was only partly handled, and sending the same payload again
+continues where the call stopped, because the candidates already added come
+back as duplicates.
+
+`throttled` is deliberately distinct: a host that refuses automated clients
+(Reddit, several CDNs) still serves the same feed to a browser. Treating that
+as a dead feed would discard a valid subscription, so it is added paused rather
+than dropped. The reader downloads the feed before storing it, even when the
+creation asks for a disabled feed, so the creation is attempted first and, when
+the reader refuses it too, the feed is stored through the reader's OPML import,
+which downloads nothing and marks the feed as disabled.
+
+**Feeds are created one at a time.** `POST /v1/feeds` fetches and parses a feed
+before inserting it; `POST /v1/import` inserts straight into the database
+without fetching anything and is not atomic. Bulk intake therefore uses the
+per-feed endpoint and keeps its own report, and `POST /opml/import` is
+deprecated. The import is used for one case only, a feed whose host refuses
+automated clients, where storing the subscription without downloading it is the
+whole point.
+
+**One feed, one applied category, many selectable folders.** The reader holds a
+single category per feed, so a feed found under several folders is applied to
+the first one and the rest are kept in the NAF record. The report names the
+applied category and the reported folders separately, so it never claims an
+organisation the reader does not have. The stored folders are a navigation
+dimension, not provenance metadata: `GET /api/v1/folders` lists them with their
+feed count, `GET /api/v1/entries?folder=...` selects the entries of their feeds,
+and `POST /api/v1/reports` accepts `folders` when no feed is named. The selector
+resolves the stored feed URL to the reader's feed identifier through one
+`list_feeds()` call, so it needs no schema change and never touches the category
+the reader applied. A feed kept under two requested folders is read once, an
+unknown folder selects nothing instead of failing, and the entry list merges,
+deduplicates, orders, and paginates in NAF because the reader can only page one
+feed at a time.
+
+**Intake stays inside the request budget.** A global limit bounds the probes
+of one batch and a second limit bounds the probes against a single host, so a
+catalogue that points many URLs at one server never floods it. A host that
+answers `429` is retried after the delay it asks for, and the number of
+retries is bounded. The batch is bounded in size and in time as well, so a
+large import cannot outlast the reverse proxy and leave the caller without a
+report.
+
+The time bound is a wall-clock bound, not a per-request timeout. The per-host
+limit turns a chunk into several rounds, and a probe may spend its timeout once
+per attempt, so a chunk is sized as `per_host_concurrency x (1 + retries)` and
+each probe gets the remaining budget divided by the same attempt count. The
+worst case of one chunk is therefore the remaining budget; the call can only
+overshoot it by one probe round. A test measures the elapsed time and fails if
+the call exceeds the budget plus one timeout.
+
+**A response is capped while it is read.** The probe streams the body and
+stops as soon as `NAF_FEED_INTAKE_MAX_BYTES` is exceeded, so a server that
+sends an endless document is refused instead of being buffered. The cap is
+applied to the bytes as they arrive, not to a body that was already read.
+
+**SSRF is refused before the network.** Only `http` and `https` are accepted;
+credentials in the authority, loopback, private, link-local, reserved, and
+metadata targets are rejected, and every redirect hop is re-validated because
+httpx would otherwise follow one into a private address. The hostname is also
+resolved before the connection, and every resolved address must be globally
+routable. The request then pins the validated address while keeping the
+original name in the `Host` header and in the TLS server name, so a second
+lookup cannot move the socket to another target. This holds even with a
+single user and no public exposure.
+
+## Git conventions
+
+- Branches: `feature/*`, `fix/*`, `docs/*`, `refactor/*`, `test/*`, created
+  from `develop`.
+- Commits: `<type>(<scope>): <subject> (#N)` plus a `Ref #N` footer. Never
+  `Closes #N`; issues close manually after review.
+- One label per family on every issue: `status::`, `priority::`, `type::`,
+  `source::`, `area::`.
+- Never bypass hooks with `--no-verify` and never force-push.
+
+## Glossary
+
+| Term | Definition |
+|---|---|
+| Port | Interface a service depends on; implemented by an adapter |
+| Adapter | Infrastructure implementation of a port (Miniflux, storage, TTS) |
+| Provenance | Source identifiers kept with every entry: feed, URL, author, date |
+| Digest | Generated report with claims, citations, period, and version |
+| Fail-fast | Startup error on missing configuration instead of a silent default |

@@ -1,55 +1,57 @@
-import asyncio
-import os
+"""Reproducible API contract probe against a live Miniflux instance.
 
-os.environ["NAF_MINIFLUX_URL"] = "http://localhost:8080"
+Reads every value from the NAF_* environment variables (see
+`samples/.env.example`). Run it only against the environment recorded in
+`REMOTE.md`, never against production, and never against a locally installed
+service.
+
+The exit code is 0 when the reader contract holds and 1 otherwise, so CI can
+gate on it.
+"""
+
+import asyncio
+import json
+import sys
+from pathlib import Path
 
 from app.adapters.miniflux.client import MinifluxClient
 
+DEBUG_DIR = Path(__file__).resolve().parents[1] / "debug"
+REPORT_PATH = DEBUG_DIR / "reader-probe.json"
+REQUIRED_ENTRY_FIELDS = ("id", "title", "url", "published_at", "feed")
 
-async def main() -> None:
+
+async def probe() -> dict[str, object]:
+    """Exercise the reader contract and collect the evidence."""
     client = MinifluxClient()
-    # Use basic auth fallback: Miniflux supports X-Auth-Token; for this proof we
-    # set the API key by creating one, but basic auth is simpler via httpx patch.
-    import httpx
-
-    original = httpx.AsyncClient
-
-    class BasicAuthAsyncClient(original):  # type: ignore[misc, valid-type]
-        def __init__(self, *args, **kwargs):
-            kwargs.setdefault("auth", httpx.BasicAuth("admin", "test123"))
-            super().__init__(*args, **kwargs)
-
-    httpx.AsyncClient = BasicAuthAsyncClient  # type: ignore[misc]
 
     feeds = await client.list_feeds()
-    print(f"OK list_feeds: {len(feeds)} feeds")
-    print("  sample:", [f["title"] for f in feeds[:3]])
-
     entries = await client.get_entries(limit=5)
-    print(f"OK get_entries: {len(entries)} entries")
-    for e in entries[:3]:
-        print(f"  - {e['title'][:60]!r} ({e['published_at']}) via {e['feed']['title']}")
-
-    read_ids = [e["id"] for e in entries[:1]]
-    if read_ids:
-        ok = await client.mark_entry_read(read_ids[0])
-        print(f"OK mark_entry_read: {ok}")
-
-    found = await client.get_entries(limit=5, search="model")
-    print(f"OK search 'model': {len(found)} hits")
-
     opml = await client.export_opml()
-    print(f"OK export_opml: {len(opml)} bytes, has <opml>: {'<opml' in opml}")
-
-    # Verify provenance fields are preserved
-    if entries:
-        e = entries[0]
-        required = ["id", "title", "url", "published_at", "feed"]
-        missing = [k for k in required if k not in e]
-        print(f"OK provenance fields present: {not missing} (missing={missing})")
-
     health = await client.health()
-    print(f"OK health: {health}")
+
+    missing = [field for field in REQUIRED_ENTRY_FIELDS if entries and field not in entries[0]]
+
+    return {
+        "feeds": len(feeds),
+        "entries_sample": len(entries),
+        "provenance_missing_fields": missing,
+        "opml_export_valid": "<opml" in opml,
+        "health": health.get("status"),
+    }
 
 
-asyncio.run(main())
+def main() -> int:
+    """Run the probe, write the evidence, and report the contract outcome."""
+    evidence = asyncio.run(probe())
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT_PATH.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+    print(json.dumps(evidence, indent=2))
+    print(f"evidence written to {REPORT_PATH}")
+
+    ok = bool(evidence["feeds"]) and not evidence["provenance_missing_fields"] and bool(evidence["opml_export_valid"])
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

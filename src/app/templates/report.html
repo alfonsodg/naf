@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ report.title }} · naf{% endblock %}
+{% block content %}
+<article class="report">
+  <header class="report__header">
+    <p class="eyebrow">Informe #{{ report.report_id }}</p>
+    <h1>{{ report.title }}</h1>
+    <p class="report__period">Periodo: {{ report.period_start | instant }} — {{ report.period_end | instant }}</p>
+    <p class="report__meta">
+      <span class="badge badge--{{ report.status }}">{{ status_labels.get(report.status, report.status) }}</span>
+      <span>Generado: {{ report.created_at | instant }}</span>
+      {% if report.meta.model %}<span>Modelo: {{ report.meta.model }}</span>{% endif %}
+      {% if report.meta.entry_count is defined %}<span>Entradas: {{ report.meta.entry_count }}</span>{% endif %}
+      {% if report.meta.total_tokens %}<span>Tokens: {{ report.meta.total_tokens }}</span>{% endif %}
+      {% if report.meta.cost_usd and report.meta.cost_usd > 0 %}<span>Coste: ${{ '%.4f'|format(report.meta.cost_usd) }}</span>{% endif %}
+      <span>{{ "Con audio" if report.has_audio else "Sin audio" }}</span>
+    </p>
+  </header>
+
+  {% if notice %}<p class="alert alert--ok" role="status">{{ notice }}</p>{% endif %}
+  {% if error %}<p class="alert alert--error" role="alert">{{ error }}</p>{% endif %}
+  {% if report.summary %}<p class="lead">{{ report.summary }}</p>{% endif %}
+
+  <section class="card" aria-labelledby="audio">
+    <h2 id="audio">Audio y transcripción</h2>
+    {% if asset %}
+    <audio id="report-audio" controls preload="metadata" aria-label="Audio del informe"
+           src="/api/v1/reports/{{ report.report_id }}/audio">
+      Tu navegador no admite la reproducción de audio.
+      <a href="/api/v1/reports/{{ report.report_id }}/audio">Descarga el archivo</a>.
+    </audio>
+    <p class="report__meta">
+      {% if asset.duration_seconds %}<span>Duración: {{ asset.duration_seconds | round(0) | int }} s</span>{% endif %}
+      {% if asset.size_bytes %}<span>Tamaño: {{ (asset.size_bytes / 1048576) | round(1) }} MB</span>{% endif %}
+      <a href="/api/v1/reports/{{ report.report_id }}/audio" download>Descargar audio</a>
+    </p>
+    {% if segments %}
+    <ol class="transcript" id="transcript" aria-label="Transcripción sincronizada">
+      {% for segment in segments %}
+      <li class="segment" data-index="{{ segment.index }}" data-start="{{ segment.start_seconds }}"
+          data-end="{{ segment.end_seconds }}"
+          data-story-index="{{ segment.story_index if segment.story_index is not none else '' }}">
+        <button type="button" class="segment__button" data-seek="{{ segment.start_seconds }}">
+          <span class="segment__time"><span class="visually-hidden">Reproducir desde </span>{{ segment.start_seconds | mmss }}</span>
+          <span class="segment__text">{{ segment.text }}</span>
+        </button>
+        {% if segment.citations %}
+        <ul class="citations citations--inline" aria-label="Fuentes de este fragmento">
+          {% for citation in segment.citations %}
+          <li>
+            <a href="{{ citation.entry_url }}" target="_blank" rel="noopener noreferrer">{{ citation.title }}</a>
+            {% if citation.author %}<span class="muted"> · {{ citation.author }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    <script type="application/json" id="audio-segments">{{ segments | tojson }}</script>
+    {% else %}
+    <p class="hint">Esta edición todavía no tiene una transcripción por segmentos.</p>
+    {% endif %}
+    {% elif report.status == "ready" %}
+    <p>Este informe aún no tiene audio. Genera la versión hablada cuando quieras; el texto no cambia.</p>
+    <form method="post" action="/ui/reports/{{ report.report_id }}/audio">
+      <button type="submit" class="button">Generar audio</button>
+    </form>
+    {% else %}
+    <p class="hint">Solo un informe listo puede convertirse en audio.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="filtros">
+    <h2 id="filtros">Selección usada</h2>
+    <dl class="facts">
+      <div><dt>Desde el último informe</dt><dd>{{ "Sí" if report.filters.since_last else "No" }}</dd></div>
+      {% if report.filters.search %}<div><dt>Búsqueda</dt><dd>{{ report.filters.search }}</dd></div>{% endif %}
+      {% if report.filters.tags %}<div><dt>Etiquetas</dt><dd>{{ report.filters.tags | join(", ") }}</dd></div>{% endif %}
+      {% if report.filters.max_entries %}<div><dt>Máximo solicitado</dt><dd>{{ report.filters.max_entries }}</dd></div>{% endif %}
+      {% if report.cursor %}<div><dt>Último cursor</dt><dd>{{ report.cursor }}</dd></div>{% endif %}
+    </dl>
+  </section>
+
+  <section aria-labelledby="historias">
+    <h2 id="historias">Historias</h2>
+    {% if report.stories %}
+    {% for story in report.stories %}
+    <article class="story" id="story-{{ loop.index0 }}" data-story-index="{{ loop.index0 }}">
+      <h3>{{ story.title }}</h3>
+      {% if story.pub_type %}<p class="eyebrow">{{ story.pub_type }}</p>{% endif %}
+      {% if story.official is not none %}
+      <p class="story__source">
+        <span class="badge badge--{{ 'official' if story.official else 'thirdparty' }}">
+          <span class="visually-hidden">Tipo de fuente: </span>{{ "Oficial" if story.official else "Terceros" }}
+        </span>
+      </p>
+      {% endif %}
+      {% if story.summary %}<p>{{ story.summary }}</p>{% endif %}
+      {% if story.claims %}
+      <h4>Afirmaciones</h4>
+      <ul>{% for claim in story.claims %}<li>{{ claim }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if story.citations %}
+      <h4>Fuentes</h4>
+      <ul class="citations">
+        {% for citation in story.citations %}
+        <li>
+          <a href="{{ citation.entry_url }}" target="_blank" rel="noopener noreferrer">{{ citation.title }}</a>
+          {% if citation.author %}<span class="muted"> · {{ citation.author }}</span>{% endif %}
+          {% if citation.quote %}<blockquote>{{ citation.quote }}</blockquote>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if story.uncertainties %}
+      <section class="uncertainties" aria-labelledby="incertidumbres-{{ loop.index0 }}">
+        <h4 id="incertidumbres-{{ loop.index0 }}">Incertidumbres</h4>
+        <ul>{% for uncertainty in story.uncertainties %}<li>{{ uncertainty }}</li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+      {% if asset and segments %}
+      <button type="button" class="link-button" data-story-seek="{{ loop.index0 }}" hidden>Escuchar esta historia</button>
+      {% endif %}
+    </article>
+    {% endfor %}
+    {% else %}
+    <p class="empty">Este informe no contiene historias.</p>
+    {% endif %}
+  </section>
+</article>
+{% endblock %}
+{% block scripts %}{% if asset and segments %}<script src="/static/player.js" defer></script>{% endif %}{% endblock %}

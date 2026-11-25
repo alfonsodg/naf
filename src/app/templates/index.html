@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Informes · naf{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <h1>Informes</h1>
+  <p>Genera un informe a partir de tus fuentes y escúchalo con su transcripción.</p>
+</div>
+
+{% if notice %}<p class="alert alert--ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="alert alert--error" role="alert">{{ error }}</p>{% endif %}
+
+<div class="layout">
+  <section class="card" aria-labelledby="crear">
+    <h2 id="crear">Crear un informe</h2>
+    <form method="post" action="/ui/reports" class="form">
+      <fieldset>
+        <legend>Periodo</legend>
+        <div class="grid">
+          <div class="field">
+            <label for="period_start">Inicio</label>
+            <input type="datetime-local" id="period_start" name="period_start" value="{{ form.period_start }}">
+          </div>
+          <div class="field">
+            <label for="period_end">Fin</label>
+            <input type="datetime-local" id="period_end" name="period_end" value="{{ form.period_end }}">
+          </div>
+        </div>
+        <p class="hint">Si dejas las fechas vacías se usa la ventana configurada. Las horas se interpretan como UTC.</p>
+      </fieldset>
+
+      <div class="field">
+        <label for="max_entries">Máximo de entradas</label>
+        <input type="number" id="max_entries" name="max_entries" min="1" inputmode="numeric"
+               value="{{ form.max_entries }}" placeholder="40">
+      </div>
+
+      <div class="check">
+        <input type="checkbox" id="since_last" name="since_last" value="on"{% if form.since_last %} checked{% endif %}>
+        <label for="since_last">Solo desde el último informe</label>
+      </div>
+      <p class="hint">Con esta opción se ignora el periodo y se usan las entradas posteriores al último cursor guardado.</p>
+
+      <div class="field">
+        <label for="tags">Etiquetas</label>
+        <input type="text" id="tags" name="tags" value="{{ form.tags }}" placeholder="inteligencia artificial, modelos">
+        <p class="hint">Separa las etiquetas con comas; se exigen todas.</p>
+      </div>
+
+      <div class="field">
+        <label for="search">Búsqueda</label>
+        <input type="search" id="search" name="search" value="{{ form.search }}" placeholder="modelo, seguridad, investigación">
+      </div>
+
+      <button type="submit" class="button">Generar informe</button>
+      <p class="hint">La generación puede tardar unos minutos. El informe queda guardado con sus fuentes.</p>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="historial">
+    <h2 id="historial">Historial reciente</h2>
+    {% if reports %}
+    <ul class="report-list">
+      {% for report in reports %}
+      <li class="report-item">
+        <a class="report-item__title" href="/reports/{{ report.report_id }}">{{ report.title }}</a>
+        <p class="report-item__meta">
+          <span class="badge badge--{{ report.status }}">{{ status_labels.get(report.status, report.status) }}</span>
+          <span>#{{ report.report_id }}</span>
+          <span>{{ report.created_at | instant }}</span>
+          <span>{{ "Con audio" if report.has_audio else "Sin audio" }}</span>
+        </p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">Todavía no hay informes. Crea el primero con el formulario.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
