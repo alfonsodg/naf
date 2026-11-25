@@ -3,7 +3,7 @@
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ${NAF_DB_USER:?NAF_DB_USER is required}
       POSTGRES_PASSWORD: ${NAF_DB_PASSWORD:?NAF_DB_PASSWORD is required}
@@ -17,7 +17,7 @@ services:
       retries: 5
 
   miniflux-db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ${NAF_MINIFLUX_DB_USER:?NAF_MINIFLUX_DB_USER is required}
       POSTGRES_PASSWORD: ${NAF_MINIFLUX_DB_PASSWORD:?NAF_MINIFLUX_DB_PASSWORD is required}
@@ -31,7 +31,7 @@ services:
       retries: 5
 
   miniflux:
-    image: miniflux/miniflux:2.3.3
+    image: miniflux/miniflux:2.3.5
     depends_on:
       miniflux-db:
         condition: service_healthy
@@ -127,7 +127,7 @@ services:
   # committed. Plain HTTP, so the credentials travel unencrypted until TLS or
   # a private network replaces it.
   proxy:
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine
     depends_on: [naf]
     volumes:
       # Relative paths resolve from this file's directory, so ../proxy is

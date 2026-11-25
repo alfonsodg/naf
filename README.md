@@ -41,8 +41,9 @@ as GitHub issues, with a meta-issue coordinating the rest.
 
 ## Tech stack
 
-Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, psycopg 3, httpx,
-uv. PostgreSQL for persistence. Miniflux as the external reader.
+Python 3.14, FastAPI 0.165, Pydantic 2.14, SQLAlchemy 2.1, Alembic 1.20,
+psycopg 3.3, httpx, uv 0.13. PostgreSQL 18 for persistence. Miniflux 2.3.5 as
+the external reader; Kokoro ONNX 0.6 for speech.
 
 ## Quick start
 
