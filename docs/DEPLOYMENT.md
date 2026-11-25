@@ -189,6 +189,11 @@ it, because the container never receives the variable.
 | `NAF_TTS_VOICE` | `ef_dora` | Spanish voice used for synthesis |
 | `NAF_TTS_SPEED` | `1.0` | Speech rate multiplier |
 | `NAF_MODELS_DIR` | `/opt/naf/models` | Host directory mounted read-only at `/models` |
+| `NAF_DISPLAY_TIMEZONE` | `UTC` | Zone the interface prints; the API keeps UTC |
+| `NAF_LLM_INPUT_USD_PER_1K` | `0` | Price per 1,000 prompt tokens; zero leaves the reported cost at zero |
+| `NAF_LLM_OUTPUT_USD_PER_1K` | `0` | Price per 1,000 completion tokens |
+| `NAF_EDITION_RETENTION_DAYS` | `90` | Window the manual edition cleanup uses |
+| `NAF_MINIFLUX_MAX_RETRIES` | `3` | Retries for a 502/503/504 or a transport error from the reader |
 
 Raise the cap only for a validated source that publishes more than the default,
 and keep the value bounded: it is a memory limit, not a preference.
@@ -253,6 +258,23 @@ published directly.
   reachable from the internet is exposed too, and Basic auth over plain HTTP
   sends the password in clear: TLS or a private network is required before this
   counts as more than a test exposure.
+
+## Backups
+
+The databases and the generated audio are backed up on the host, not by the
+service. The deployment inventory (`REMOTE.md`) records the host paths; the
+procedure is the same everywhere:
+
+1. `pg_dump` each database from inside its container (`naf` and `miniflux`), gzip
+   the dump, and keep it outside the checkout.
+2. Archive the `naf-audio` volume, which holds the immutable report audio.
+3. Delete archives older than seven days.
+4. Run it daily from cron and check the archive sizes, not only the exit code.
+
+A restore is: stop `naf`, restore the NAF dump into an empty database, restore
+the audio archive into the volume, start `naf`, and verify `/health` plus one
+report with its audio. The reader database is restored the same way, before
+`miniflux` starts.
 
 ## Persistent storage
 
@@ -345,6 +367,14 @@ A liveness 200 is a smoke check only and does not replace endpoint-level tests.
    migration.
 3. Verify `/health`.
 4. Record the incident and open an issue labeled `priority::critical`.
+
+## Timezone and cost
+
+`NAF_DISPLAY_TIMEZONE` only affects what the interface prints; every stored
+instant and every API payload stays in UTC, so a report never depends on where
+it is read. The cost shown on an edition is computed from the provider usage and
+the two configured prices; with the prices at zero the tokens are still recorded
+and the cost reads zero.
 
 ## Test boundaries
 
