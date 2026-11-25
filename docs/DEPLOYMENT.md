@@ -276,6 +276,18 @@ the audio archive into the volume, start `naf`, and verify `/health` plus one
 report with its audio. The reader database is restored the same way, before
 `miniflux` starts.
 
+## PostgreSQL 18
+
+The database images are `postgres:18-alpine` and mount the volume at
+`/var/lib/postgresql`, not at its `data` subdirectory: the 18 image keeps its
+cluster in a versioned directory under the parent so `pg_upgrade --link` can
+cross mount points later.
+
+A major upgrade is a dump and restore, not a volume swap: dump both databases
+with `pg_dump`, stop the stack, remove the old volumes, start the new major, and
+restore the dumps before starting Miniflux and NAF. The 2026-11-25 upgrade from
+17 to 18 followed that path with the dumps kept under `naf-backups/pre-pg18-*`.
+
 ## Persistent storage
 
 | Volume | Mount | Content | Inviolable |
@@ -294,7 +306,7 @@ or recreated.
 - Multi-stage build (`Dockerfile`): builder installs the locked environment,
   runtime copies only `.venv` and `src/`.
 - Runs as `nobody`; no secrets are baked into the image.
-- Base image pinned to `python:3.13-slim`; `:latest` is never used.
+- Base image pinned to `python:3.14-slim`; `:latest` is never used.
 - `HEALTHCHECK` calls `GET /health`.
 - Builds and pushes happen only in CI/CD. Never build an image manually.
 

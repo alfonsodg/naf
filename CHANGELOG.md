@@ -167,6 +167,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- Stack moved to the latest stable releases: FastAPI 0.165, Pydantic 2.14.4,
+  SQLAlchemy 2.1.9, Alembic 1.20.1, psycopg 3.3.9, pytest 9.2, ruff 0.17.6,
+  mypy 2.4.1; Python 3.14 in the image and CI; PostgreSQL 18, Miniflux 2.3.5,
+  nginx 1.30. The exceptions and their review dates are recorded in
+  `docs/STANDARDS.md`.
 - The reader's browser-facing address is a deployment value
   (`NAF_MINIFLUX_BASE_URL`), so a published host does not need an SSH tunnel and a
   local stack keeps `http://localhost:8080` by default.
