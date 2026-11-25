@@ -359,6 +359,8 @@ changing the API contract. There is no framework and no build step.
 - `docs/DEPLOYMENT.md` — topology, volumes, migrations, health, and rollback.
 - `docs/PRODUCT_PLAN.md` — product specification, scope, and phased delivery plan.
 - `docs/PILOT_PLAN.md` — Phase 6 cohort, readings, security, and go/no-go rules.
+- `docs/PILOT_RESULTS.md` — the first pilot reading and its limits.
+- `docs/DOCKER.md` — image shape, tag rule, and build verification.
 - `feeds/README.md` — curated feed pack, taxonomy, and import.
 - `CHANGELOG.md` — change history.
 - `REMOTE.md` — local-only operational inventory (never tracked).
