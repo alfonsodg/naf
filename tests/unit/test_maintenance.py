@@ -141,3 +141,13 @@ def test_the_window_is_validated(session: Session, storage: FakeStorage) -> None
     """Zero or an excessive window is refused at the boundary."""
     assert client.get("/api/v1/maintenance/editions", params={"days": 0}).status_code == 422
     assert client.get("/api/v1/maintenance/editions", params={"days": 4000}).status_code == 422
+
+
+def test_the_preview_orders_editions_oldest_first(session: Session, storage: FakeStorage) -> None:
+    """A cleanup report is read in the order the editions were created."""
+    older = _edition(session, datetime.utcnow() - timedelta(days=200))
+    newer = _edition(session, datetime.utcnow() - timedelta(days=150))
+
+    body = client.get("/api/v1/maintenance/editions", params={"days": 90}).json()["data"]
+
+    assert body["editions"] == [older.id, newer.id]
