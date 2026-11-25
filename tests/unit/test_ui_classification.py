@@ -27,6 +27,10 @@ client = TestClient(app)
 class BacklogReader(FakeReader):
     """Reader double that also serves the empty feed list the sources page reads."""
 
+    def __init__(self, entries: list[dict[str, Any]]) -> None:
+        """Bind the backlog by name; FakeReader's first positional flag is ``missing``."""
+        super().__init__(entries=entries)
+
     async def list_feeds(self) -> list[dict[str, Any]]:
         """Return no feeds: these tests only exercise the classification action."""
         return []
