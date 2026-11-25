@@ -107,6 +107,16 @@ class Settings(BaseSettings):
     llm_api_key: str = Field(default="", description="LLM provider API key")
     llm_model: str = Field(default="", description="Model identifier; empty means the adapter is not configured")
     llm_timeout: float = Field(default=120.0, gt=0, description="Seconds allowed for one completion")
+    llm_input_usd_per_1k: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Price per 1,000 prompt tokens; zero leaves the reported cost at zero",
+    )
+    llm_output_usd_per_1k: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Price per 1,000 completion tokens; zero leaves the reported cost at zero",
+    )
     llm_max_output_tokens: int = Field(
         default=6000,
         ge=256,

@@ -20,6 +20,7 @@ from app.core.ports.report_generator import ReportGenerator
 from app.models import Digest, DigestStory
 from app.schemas.digest import Digest as GeneratedDigest
 from app.schemas.reports import ReportCreateRequest
+from app.services.relations import persist_report_relations
 from app.services.report_selection import published_at, select_entries, utc
 
 PROMPT_VERSION = "1.1"
@@ -145,7 +146,7 @@ class ReportService:
             entry_ids=_entry_ids(entries),
             cursor=newest.isoformat() if newest is not None else None,
             version=generated.version,
-            meta=self._meta(len(entries)),
+            meta=self._meta(len(entries), generated.usage),
             status="ready",
         )
         row.stories = [
@@ -162,7 +163,9 @@ class ReportService:
             )
             for index, story in enumerate(generated.stories)
         ]
-        return self._store(row)
+        stored = self._store(row)
+        persist_report_relations(self.session, stored)
+        return stored
 
     def _store_failed(
         self,
@@ -194,13 +197,29 @@ class ReportService:
         self.session.commit()
         return row
 
-    def _meta(self, entry_count: int) -> dict[str, Any]:
-        """Describe the generator that produced, or was meant to produce, the edition."""
-        return {
+    def _meta(self, entry_count: int, usage: dict[str, int] | None = None) -> dict[str, Any]:
+        """Describe the generator and, when it ran, what it cost."""
+        meta: dict[str, Any] = {
             "model": self.settings.llm_model,
             "prompt_version": PROMPT_VERSION,
             "entry_count": entry_count,
         }
+        meta.update(usage_meta(usage or {}, self.settings))
+        return meta
+
+
+def usage_meta(usage: dict[str, int], settings: Settings) -> dict[str, Any]:
+    """Turn provider usage into reproducible token counts and a configured cost."""
+    prompt = int(usage.get("prompt_tokens", 0))
+    completion = int(usage.get("completion_tokens", 0))
+    total = int(usage.get("total_tokens", prompt + completion))
+    cost = prompt / 1000 * settings.llm_input_usd_per_1k + completion / 1000 * settings.llm_output_usd_per_1k
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+        "cost_usd": round(cost, 6),
+    }
 
 
 def _filters(request: ReportCreateRequest) -> dict[str, Any]:

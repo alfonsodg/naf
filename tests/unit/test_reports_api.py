@@ -169,7 +169,15 @@ def test_a_report_is_served_and_stored_with_its_stories(session: Session, wire: 
     assert body["entry_ids"] == [2, 1]
     assert body["cursor"] == "2026-11-23T09:00:00+00:00"
     assert body["version"] == "1.0"
-    assert body["meta"] == {"model": "report-model", "prompt_version": "1.1", "entry_count": 2}
+    assert body["meta"] == {
+        "model": "report-model",
+        "prompt_version": "1.1",
+        "entry_count": 2,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+    }
     assert [entry["entry_id"] for entry in generator.calls[0]["entries"]] == [2, 1]
 
     detail = client.get(f"/api/v1/reports/{body['report_id']}").json()["data"]
