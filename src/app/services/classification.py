@@ -190,8 +190,15 @@ class ClassificationService:
         """
         if not entry_ids:
             return set()
-        statement = select(EntryClassification.entry_id).where(EntryClassification.entry_id.in_(entry_ids))
-        return {int(stored) for stored in self.session.execute(statement).scalars().all()}
+        rows = cast(
+            "list[int]",
+            list(
+                self.session.execute(
+                    select(EntryClassification.entry_id).where(EntryClassification.entry_id.in_(entry_ids))
+                ).scalars()
+            ),
+        )
+        return {int(stored) for stored in rows}
 
     def _mentions(self, entry_id: int) -> list[EntryModelMention]:
         """Return the stored model mentions of one entry in insertion order."""

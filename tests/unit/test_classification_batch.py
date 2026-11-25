@@ -198,3 +198,16 @@ def test_pending_scans_only_the_requested_window(session: Session, wire: Callabl
 
     assert response.json() == {"scanned": 2, "pending": 2}
     assert reader.list_calls == [2]
+
+
+def test_an_empty_reader_classifies_nothing(session: Session, wire: Callable[..., Any]) -> None:
+    """A reader with no recent entries completes with zero work and no model call."""
+    _, classifier = wire(reader=FakeReader(entries=[]))
+
+    response = client.post("/api/v1/classifications/run", json={"limit": 5})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["classified"] == 0
+    assert body["scanned"] == 0
+    assert classifier.calls == []
