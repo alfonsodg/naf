@@ -92,7 +92,7 @@ def test_the_folders_page_shows_and_saves_the_set(session: Session, wire: _Reade
     assert page.status_code == 200
     assert 'value="AI"' in page.text
 
-    saved = client.post("/ui/feeds/1/folders", data={"folders": "AI, Hardware"})
+    saved = client.post("/ui/feeds/1/folders", data={"folders": "AI, Hardware"}, follow_redirects=False)
     assert saved.status_code == 303
     assert saved.headers["location"] == "/sources?notice=folders"
     stored = session.query(FeedFolder).filter_by(feed_url="https://a.test/rss").all()
@@ -109,7 +109,9 @@ def test_the_classifications_page_lists_and_corrects(session: Session, wire: _Re
     assert page.status_code == 200
     assert "Automática" in page.text
 
-    saved = client.post("/ui/classifications/7", data={"category": "Ciencia", "tags": "espacio, luna"})
+    saved = client.post(
+        "/ui/classifications/7", data={"category": "Ciencia", "tags": "espacio, luna"}, follow_redirects=False
+    )
     assert saved.status_code == 303
     session.refresh(row)
     assert row.category == "Ciencia"
