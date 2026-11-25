@@ -22,8 +22,8 @@ for a file that is intentionally absent.
 | Fact | Value |
 | --- | --- |
 | Kind | Software, one deployable service, public GitHub repository |
-| Runtime | Python `>=3.12`; the image pins `python:3.13-slim` |
-| Stack | FastAPI 0.144, Pydantic 2.14, SQLAlchemy 2.1, Alembic 1.20, PostgreSQL 17, Miniflux 2.3.3, Kokoro ONNX 0.6.1, pytest 9.2, ruff 0.17, mypy 2.4, bandit |
+| Runtime | Python 3.14; `requires-python` stays `>=3.12` so the code is portable |
+| Stack | FastAPI 0.165, Pydantic 2.14.4, SQLAlchemy 2.1.9, Alembic 1.20.1, PostgreSQL 18, Miniflux 2.3.5, nginx 1.30, Kokoro ONNX 0.6.1, pytest 9.2, ruff 0.17.6, mypy 2.4.1, bandit, uv 0.13.10 |
 | Validation | `uv sync --extra dev`, `ruff check`, `ruff format --check`, `mypy src/`, `bandit -r src/ -q`, `pytest tests/unit --cov=src --cov-fail-under=80` |
 | Tests | Unit and contract suites use doubles; live reader and model runs happen only on the sandbox |
 | Limits | 300-line source files, strict typing, 120-column format, coverage floor 80 |
@@ -32,9 +32,22 @@ for a file that is intentionally absent.
 The operational facts (hosts, ports, credentials, backup paths) live in the
 local-only `REMOTE.md`, never here.
 
+## Version policy
+
+The latest stable release is the default. `uv lock --upgrade` moves the Python
+dependencies and every container image is pinned to a number, never to `latest`.
+A component behind the latest stable release is an exception with a reason and a
+review date:
+
+| Component | Choice | Why | Review |
+| --- | --- | --- | --- |
+| Python | 3.14 (image and CI) | 3.15 is stable, but `onnxruntime` 1.32 ships no `cp315` wheel, and the audio path needs it | When `onnxruntime` publishes 3.15 wheels |
+| PostgreSQL | 18 | 19.0 shipped on 2026-11-19; give Miniflux and the dump/restore path time on the previous stable | 2026-12-19 |
+| nginx | 1.30 (stable branch) | The odd-numbered branch (1.31) is mainline, not the stable line | On each stable release |
+
 ## Language and runtime
 
-- Python `>=3.12`, run with the version pinned in the image (`python:3.13-slim`).
+- Python `>=3.12`, run with the version pinned in the image (`python:3.14-slim`).
 - `uv` is the only package manager. Never `pip install` into the environment.
 - Code, comments, docstrings, commit messages, branches, and issue text are
   English. Product output (reports and audio) is Spanish.

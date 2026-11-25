@@ -2,7 +2,7 @@
 # Build and push exclusively through CI/CD: never build images manually.
 
 # --- Stage 1: build the application virtual environment ---
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -14,13 +14,13 @@ WORKDIR /build
 
 # Dependencies first so the layer cache survives source-only changes.
 COPY pyproject.toml uv.lock README.md ./
-RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev --no-install-project --extra tts
+RUN pip install --no-cache-dir uv==0.13.10 && uv sync --frozen --no-dev --no-install-project --extra tts
 
 COPY src/ src/
 RUN uv sync --frozen --no-dev --no-editable --extra tts
 
 # --- Stage 2: runtime ---
-FROM python:3.13-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
