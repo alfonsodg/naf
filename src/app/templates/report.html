@@ -11,6 +11,8 @@
       <span>Generado: {{ report.created_at | instant }}</span>
       {% if report.meta.model %}<span>Modelo: {{ report.meta.model }}</span>{% endif %}
       {% if report.meta.entry_count is defined %}<span>Entradas: {{ report.meta.entry_count }}</span>{% endif %}
+      {% if report.meta.total_tokens %}<span>Tokens: {{ report.meta.total_tokens }}</span>{% endif %}
+      {% if report.meta.cost_usd and report.meta.cost_usd > 0 %}<span>Coste: ${{ '%.4f'|format(report.meta.cost_usd) }}</span>{% endif %}
       <span>{{ "Con audio" if report.has_audio else "Sin audio" }}</span>
     </p>
   </header>

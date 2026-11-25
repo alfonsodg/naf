@@ -100,17 +100,23 @@ class OpenAIReportGenerator(ReportGenerator):
             )
 
         user_prompt = _user_prompt(entries, filters, since_last)
-        model, violations = self._interpret(await self._complete(_messages(user_prompt)), entries, filters)
+        usage: dict[str, int] = {}
+        content, used = await self._complete(_messages(user_prompt))
+        _add_usage(usage, used)
+        model, violations = self._interpret(content, entries, filters)
         if violations:
             # Exactly one repair: the second answer either passes or the report fails.
             repair = _repair_prompt(user_prompt, violations)
-            model, violations = self._interpret(await self._complete(_messages(repair)), entries, filters)
+            content, used = await self._complete(_messages(repair))
+            _add_usage(usage, used)
+            model, violations = self._interpret(content, entries, filters)
         if model is None:
             raise ReportGenerationError("the report provider did not return valid JSON after a repair attempt")
         if violations:
             raise CitationValidationError("; ".join(violations))
 
         digest = self._to_digest(model, entries, filters)
+        digest.usage = usage
         if not digest.stories:
             raise ReportGenerationError("the report provider returned no stories for a non-empty selection")
         return digest
@@ -124,8 +130,8 @@ class OpenAIReportGenerator(ReportGenerator):
         if not self._settings.llm_model or not self._settings.llm_api_key:
             raise ReportGenerationError("the report generator is not configured")
 
-    async def _complete(self, messages: list[dict[str, str]]) -> str:
-        """Ask the provider for one completion and return its text."""
+    async def _complete(self, messages: list[dict[str, str]]) -> tuple[str, dict[str, int]]:
+        """Ask the provider for one completion and return its text and usage."""
         payload: dict[str, Any] = {
             "model": self._settings.llm_model,
             "messages": messages,
@@ -148,7 +154,13 @@ class OpenAIReportGenerator(ReportGenerator):
             raise ReportGenerationError("the report provider returned an unexpected response") from exc
         if not isinstance(content, str) or not content.strip():
             raise ReportGenerationError("the report provider returned an empty completion")
-        return content
+        raw_usage = data.get("usage")
+        counts: dict[str, int] = {}
+        if isinstance(raw_usage, dict):
+            for key, value in raw_usage.items():
+                if key in {"prompt_tokens", "completion_tokens", "total_tokens"} and isinstance(value, int):
+                    counts[str(key)] = value
+        return content, counts
 
     async def _post(self, payload: dict[str, Any]) -> httpx.Response:
         """Send one chat completion request, normalising transport failures."""
@@ -197,6 +209,12 @@ class OpenAIReportGenerator(ReportGenerator):
                 if citation.entry_id not in known:
                     violations.append(f"La historia {position} cita entry_id={citation.entry_id}, ausente de la lista.")
         return violations
+
+
+def _add_usage(total: dict[str, int], used: dict[str, int]) -> None:
+    """Accumulate the provider usage of every call made for one edition."""
+    for key, value in used.items():
+        total[key] = total.get(key, 0) + value
 
 
 def _messages(user_prompt: str) -> list[dict[str, str]]:

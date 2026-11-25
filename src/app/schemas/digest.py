@@ -40,3 +40,4 @@ class Digest(BaseModel):
     cursor: str | None = None
     stories: list[DigestStory]
     version: str = "1.0"
+    usage: dict[str, int] = Field(default_factory=dict)
