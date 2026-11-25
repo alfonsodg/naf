@@ -25,7 +25,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   entries, cleanup once a day — and the deployment reference states what the
   reader deletes, what NAF keeps of a citation, and what happens when the cited
   entry has been archived.
-||||||| 02c0f40
 - Pilot metrics: `GET /api/v1/metrics?days=7` reads the observation window from
   NAF-owned ingestion runs, report editions, and audio assets plus the reader's
   feed list. Freshness and stale sources, pass success, report and audio rates,
