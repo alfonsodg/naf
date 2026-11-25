@@ -133,6 +133,7 @@ def test_a_missing_file_is_counted_and_does_not_block(session: Session, storage:
 
     assert body["missing_files"] == 1
     assert body["deleted_editions"] == 1
+    assert all(isinstance(path, str) for path in storage.deleted)
 
 
 def test_the_window_is_validated(session: Session, storage: FakeStorage) -> None:

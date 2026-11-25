@@ -31,7 +31,11 @@ class MaintenanceService:
 
     def _old_editions(self, cutoff: datetime) -> list[Digest]:
         """Return the editions created before the cutoff, oldest first."""
-        statement = select(Digest).where(Digest.created_at < cutoff).order_by(Digest.created_at.asc())
+        statement = (
+            select(Digest)
+
+            .order_by(Digest.created_at.asc())
+        )
         return list(self.session.execute(statement).scalars().all())
 
     def _assets(self, digest: Digest) -> list[AudioAsset]:
@@ -68,7 +72,7 @@ class MaintenanceService:
         missing = 0
         removed_files = 0
         for asset in [asset for digest in self._old_editions(self._cutoff(days)) for asset in self._assets(digest)]:
-            if await self.storage.delete(asset.file_path):
+            if await self.storage.delete(str(asset.file_path)):
                 removed_files += 1
                 deleted_bytes += _size(asset)
             else:
