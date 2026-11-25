@@ -104,6 +104,10 @@ services:
       NAF_TTS_VOICES_PATH: ${NAF_TTS_VOICES_PATH:-/models/voices-v1.0.bin}
       NAF_TTS_VOICE: ${NAF_TTS_VOICE:-ef_dora}
       NAF_TTS_SPEED: ${NAF_TTS_SPEED:-1.0}
+      NAF_DISPLAY_TIMEZONE: ${NAF_DISPLAY_TIMEZONE:-UTC}
+      NAF_LLM_INPUT_USD_PER_1K: ${NAF_LLM_INPUT_USD_PER_1K:-0}
+      NAF_LLM_OUTPUT_USD_PER_1K: ${NAF_LLM_OUTPUT_USD_PER_1K:-0}
+      NAF_EDITION_RETENTION_DAYS: ${NAF_EDITION_RETENTION_DAYS:-90}
     volumes:
       - naf-audio:/data/audio
       # Kokoro ONNX models live on the host; the image carries only the runtime.
